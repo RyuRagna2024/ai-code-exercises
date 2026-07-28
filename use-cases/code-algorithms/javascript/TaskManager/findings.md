@@ -96,21 +96,16 @@ When exploring or validating feature locations in this codebase: 
 3. Step 3: Register the `export` command in `cli.js`.
 4. Step 4: Add unit tests in `tests/taskStorage.test.js` to test CSV output.
 
-
-
 Exercise Part 3: Understanding Domain Models & Business Concepts
 
+ 
 
+1. Core Domain Entities & Glossary
 
- 1. Core Domain Entities & Glossary
-
-* Task: The central entity representing a single work item `id`, `title`, `description`, `status`, `priority`, `dueDate`, `tags`, `timestamps`).
-
-* TaskStatus: Registry of workflow stages `TODO`, `IN_PROGRESS`, `REVIEW`, `DONE`). Uses strings `'todo'`, `'in_progress'`) for human readability.
-
-* TaskPriority: Registry of urgency levels `LOW: 1`, `MEDIUM: 2`, `HIGH: 3`, `URGENT: 4`). Uses numbers so tasks can be sorted numerically by urgency.
-
-* Audit Timestamps:
+- Task: The central entity representing a single work item `id`, `title`, `description`, `status`, `priority`, `dueDate`, `tags`, `timestamps`).
+- TaskStatus: Registry of workflow stages `TODO`, `IN_PROGRESS`, `REVIEW`, `DONE`). Uses strings `'todo'`, `'in_progress'`) for human readability.
+- TaskPriority: Registry of urgency levels `LOW: 1`, `MEDIUM: 2`, `HIGH: 3`, `URGENT: 4`). Uses numbers so tasks can be sorted numerically by urgency.
+- Audit Timestamps:
 
   * `createdAt`: Set once when created.
 
@@ -120,48 +115,93 @@ Exercise Part 3: Understanding Domain Models & Business Concepts
 
   * `completedAt`: Set exclusively when marked `DONE`.
 
-
-
-2. Domain Model Relationship Diagram
-
-
+1. Domain Model Relationship Diagram
 
 ┌─────────────────────────────────┐ │ TASK │ │ id, title, description, tags │ └───────────────┬─────────────────┘ │ ┌─────────────────────────┼─────────────────────────┐ │ │ │ ▼ ▼ ▼
 
-
-
 ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ │ WORKFLOW │ │ IMPORTANCE │ │ TIME │ │ TaskStatus │ │ TaskPriority │ │ │ │ todo │ │ 1 LOW │ │ createdAt │ │ in_progress │ │ 2 MEDIUM │ │ updatedAt │ │ review │ │ 3 HIGH │ │ dueDate │ │ done │ │ 4 URGENT │ │ completedAt │ └──────────────┘ └──────────────┘ └──────────────┘
 
+1. Answers to Domain Model Assessment Questions
+2. Which task shows up in `node cli.js list -o` (Overdue)?
+
+- Only the first task (due yesterday, `IN_PROGRESS`) shows up. Overdue status relies strictly on: `dueDate < now` AND `status !== DONE`. Priority does not affect whether a task is overdue.
+
+ 
+
+1. What happens when a task is completed early? Is it overdue after completion?
+
+- No, a completed task is never overdue `status === DONE` overrides overdue calculations). 
+- Marking `DONE` calls `markAsDone()`, updating both `updatedAt` and `completedAt`. Changing status to `IN_PROGRESS` only updates `status` and `updatedAt` (leaving `completedAt` as `null`).
+
+ 
+
+1. Why use numbers for priority and strings for status?
+
+- Priority (Numbers 1-4): Allows mathematical comparison and sorting (e.g., `a.priority > b.priority` to show urgent tasks first). 
+- Status (Strings): Makes terminal outputs and JSON files easily human-readable without requiring a lookup key.
+
+ 
+
+1. When priority changes from MEDIUM to URGENT on a task in review:
+
+- Domain state changed: `priority` (2 -> 4) and `updatedAt` timestamp. 
+- Unchanged: `status` remains `REVIEW`, `createdAt`, `dueDate`, and `completedAt` remain untouched. Workflow and urgency are independent dimensions.
+
+ 
+
+1. Impact of adding a "snoozed" status:
+
+- `isOverdue()` rule: Needs evaluation (should snoozed tasks trigger overdue alerts?). 
+- `stats` command: Needs updating to count/display snoozed items. 
+- CLI & Merge logic: `cli.js` options and `task_list_merge.js` conflicts need rules for handling snoozed tasks.
+
+  
+Exercise Part 4: Practical Application
 
 
-3. Answers to Domain Model Assessment Questions 
 
-1. Which task shows up in `node cli.js list -o` (Overdue)? 
+1. Planning: Overdue Auto-Abandonment Business Rule
 
-* Only the first task (due yesterday, `IN_PROGRESS`) shows up. Overdue status relies strictly on: `dueDate < now` AND `status !== DONE`. Priority does not affect whether a task is overdue. 
+Scenario: *"Tasks overdue for more than 7 days should automatically be marked as 'abandoned', unless they are marked as high/urgent priority."*
 
-2. What happens when a task is completed early? Is it overdue after completion? 
 
-* No, a completed task is never overdue `status === DONE` overrides overdue calculations). 
 
-* Marking `DONE` calls `markAsDone()`, updating both `updatedAt` and `completedAt`. Changing status to `IN_PROGRESS` only updates `status` and `updatedAt` (leaving `completedAt` as `null`). 
+Files to Modify
 
-3. Why use numbers for priority and strings for status? 
+1. `models.js`:
 
-* Priority (Numbers 1-4): Allows mathematical comparison and sorting (e.g., `a.priority > b.priority` to show urgent tasks first). 
+   * Add `ABANDONED: 'abandoned'` to the `TaskStatus` registry.
 
-* Status (Strings): Makes terminal outputs and JSON files easily human-readable without requiring a lookup key. 
+   * Add a business rule method to the `Task` class (e.g., `isEligibleForAbandonment()`) that checks if `isOverdue()` is true by $> 7$ days AND `priority < TaskPriority.HIGH`.
 
-4. When priority changes from MEDIUM to URGENT on a task in review: 
+2. `app.js`:
 
-* Domain state changed: `priority` (2 -> 4) and `updatedAt` timestamp. 
+   * Add a service/manager method `checkAndAbandonTasks()` to iterate over active tasks and update their status using the model rule.
 
-* Unchanged: `status` remains `REVIEW`, `createdAt`, `dueDate`, and `completedAt` remain untouched. Workflow and urgency are independent dimensions. 
+3. `cli.js`:
 
-5. Impact of adding a "snoozed" status: 
+   * Add or hook into an automated entry point (e.g., a `clean` command or auto-check on `list`) to trigger the abandon logic.
 
-* `isOverdue()` rule: Needs evaluation (should snoozed tasks trigger overdue alerts?). 
+4. `tests/`:
 
-* `stats` command: Needs updating to count/display snoozed items. 
+    *Add unit tests in* `task.test.js` *to verify tasks $\le 7$ days overdue or high-priority tasks are* not* marked as abandoned.
 
-* CLI & Merge logic: `cli.js` options and `task_list_merge.js` conflicts need rules for handling snoozed tasks.
+
+
+Questions for the Team Before Implementing
+
+* Priority Threshold: Does "high priority" strictly mean `TaskPriority.HIGH` (3), or does it also protect `TaskPriority.URGENT` (4)?
+
+* Timestamp Behavior: Should abandoning a task record a specific `abandonedAt` date, or just update `updatedAt`?
+
+* Execution Trigger: Should this rule run automatically every time a user runs `node cli.js list`, or should it be an explicit maintenance command like `node cli.js cleanup`?
+
+
+
+2. Reflection
+
+* How AI Prompts Helped: The structured prompts made it easy to trace how data flows from user commands down to file I/O, helping separate interface code `cli.js`) from pure domain logic `models.js`).
+
+* Remaining Codebase Questions: How tasks will be synced or merged across external instances using `task_list_merge.js`.
+
+* Next Steps for Growth: Build unit tests for edge cases (e.g., leap years or timezone shifts when calculating the 7-day overdue difference) and implement the CSV export feature end-to-end.
