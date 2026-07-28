@@ -1,6 +1,6 @@
 # Task Manager Application: Project Findings & Structure
 
- 
+Exercise Part 1: Understanding Project Structure
 
 1. Initial Understanding & Assumptions
 
@@ -48,18 +48,24 @@ The application follows a simple 4-layer flow when processing a command:
 
 1. Unused Modules: Are `task_parser.js`, `task_priority.js`, and `task_list_merge.js` planned to be integrated into `cli.js`, or are they standalone exercise modules?
 2. Storage Roadmap: Is local JSON file storage `tasks.json`) the long-term solution, or are there plans to migrate to a database?
-3. Testing Workflow: What is the expected development workflow when adding a feature—should we write Jest tests first, or update `cli.js` first?
-  *Exercise Part 2: Finding Feature Implementation (Task Export to CSV)**
-  *
-  1. Initial Search & Approach Evaluation**
 
-*** Search Terms Used:** `storage`**,** `writeFile`**,** `JSON`**,** `task`**.**
+Testing Workflow: What is the expected development workflow when adding a feature—should we write Jest tests first, or update `cli.js` first?
 
-*** Files Checked:** `storage.js`**,** `app.js`**,** `cli.js`**.**
+---
 
-*** Evaluation: Searching for file interaction terms** `writeFile`**,** `JSON`**) led directly to** `storage.js`**. Because all files sit in the root directory, feature implementation relies on identifying which module handles each stage of data flow rather than navigating complex directory structures.**
 
- **2. Feature Location & Affected Components**
+
+Exercise Part 2: Finding Feature Implementation (Task Export to CSV)
+
+1. Initial Search & Approach Evaluation
+
+*Search Terms Used:** `storage`**,** `writeFile`**,** `JSON`**,** `task`**.**
+
+*Files Checked:** `storage.js`**,** `app.js`**,** `cli.js`**.**
+
+*Evaluation: Searching for file interaction terms** `writeFile`**,** `JSON`**) led directly to** `storage.js`**. Because all files sit in the root directory, feature implementation relies on identifying which module handles each stage of data flow rather than navigating complex directory structures.**
+
+1. **Feature Location & Affected Components**
 
 **To add a "Task Export to CSV" feature, changes are divided across three key files:**
 
@@ -96,6 +102,10 @@ When exploring or validating feature locations in this codebase: 
 3. Step 3: Register the `export` command in `cli.js`.
 4. Step 4: Add unit tests in `tests/taskStorage.test.js` to test CSV output.
 
+---
+
+  
+  
 Exercise Part 3: Understanding Domain Models & Business Concepts
 
  
@@ -155,53 +165,37 @@ Exercise Part 3: Understanding Domain Models & Business Concepts
 - `stats` command: Needs updating to count/display snoozed items. 
 - CLI & Merge logic: `cli.js` options and `task_list_merge.js` conflicts need rules for handling snoozed tasks.
 
-  
+---
+
+
+
 Exercise Part 4: Practical Application
-
-
 
 1. Planning: Overdue Auto-Abandonment Business Rule
 
 Scenario: *"Tasks overdue for more than 7 days should automatically be marked as 'abandoned', unless they are marked as high/urgent priority."*
 
-
-
 Files to Modify
 
 1. `models.js`:
-
-   * Add `ABANDONED: 'abandoned'` to the `TaskStatus` registry.
-
-   * Add a business rule method to the `Task` class (e.g., `isEligibleForAbandonment()`) that checks if `isOverdue()` is true by $> 7$ days AND `priority < TaskPriority.HIGH`.
-
+  - Add `ABANDONED: 'abandoned'` to the `TaskStatus` registry.
+  - Add a business rule method to the `Task` class (e.g., `isEligibleForAbandonment()`) that checks if `isOverdue()` is true by $> 7$ days AND `priority < TaskPriority.HIGH`.
 2. `app.js`:
-
-   * Add a service/manager method `checkAndAbandonTasks()` to iterate over active tasks and update their status using the model rule.
-
+  - Add a service/manager method `checkAndAbandonTasks()` to iterate over active tasks and update their status using the model rule.
 3. `cli.js`:
-
-   * Add or hook into an automated entry point (e.g., a `clean` command or auto-check on `list`) to trigger the abandon logic.
-
+  - Add or hook into an automated entry point (e.g., a `clean` command or auto-check on `list`) to trigger the abandon logic.
 4. `tests/`:
-
-    *Add unit tests in* `task.test.js` *to verify tasks $\le 7$ days overdue or high-priority tasks are* not* marked as abandoned.
-
-
+  *Add unit tests in* `task.test.js` *to verify tasks $\le 7$ days overdue or high-priority tasks are* not* marked as abandoned.
 
 Questions for the Team Before Implementing
 
-* Priority Threshold: Does "high priority" strictly mean `TaskPriority.HIGH` (3), or does it also protect `TaskPriority.URGENT` (4)?
+- Priority Threshold: Does "high priority" strictly mean `TaskPriority.HIGH` (3), or does it also protect `TaskPriority.URGENT` (4)?
+- Timestamp Behavior: Should abandoning a task record a specific `abandonedAt` date, or just update `updatedAt`?
+- Execution Trigger: Should this rule run automatically every time a user runs `node cli.js list`, or should it be an explicit maintenance command like `node cli.js cleanup`?
 
-* Timestamp Behavior: Should abandoning a task record a specific `abandonedAt` date, or just update `updatedAt`?
+1. Reflection
 
-* Execution Trigger: Should this rule run automatically every time a user runs `node cli.js list`, or should it be an explicit maintenance command like `node cli.js cleanup`?
+- How AI Prompts Helped: The structured prompts made it easy to trace how data flows from user commands down to file I/O, helping separate interface code `cli.js`) from pure domain logic `models.js`).
+- Remaining Codebase Questions: How tasks will be synced or merged across external instances using `task_list_merge.js`.
+- Next Steps for Growth: Build unit tests for edge cases (e.g., leap years or timezone shifts when calculating the 7-day overdue difference) and implement the CSV export feature end-to-end.
 
-
-
-2. Reflection
-
-* How AI Prompts Helped: The structured prompts made it easy to trace how data flows from user commands down to file I/O, helping separate interface code `cli.js`) from pure domain logic `models.js`).
-
-* Remaining Codebase Questions: How tasks will be synced or merged across external instances using `task_list_merge.js`.
-
-* Next Steps for Growth: Build unit tests for edge cases (e.g., leap years or timezone shifts when calculating the 7-day overdue difference) and implement the CSV export feature end-to-end.
