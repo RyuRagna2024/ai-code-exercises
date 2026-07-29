@@ -1,201 +1,135 @@
 # Task Manager Application: Project Findings & Structure
 
-Exercise Part 1: Understanding Project Structure
+## Exercise Part 1: Understanding Project Structure
 
-1. Initial Understanding & Assumptions
-
+### 1. Initial Understanding & Assumptions
 Before running the AI analysis, my initial observations were:
+* **Application Purpose:** A Task Manager application to create, organize, and manage to-do lists.
+* **Technology Stack:** Built using JavaScript and Node.js (identified via `package.json` and `.js` file extensions).
+* **Codebase Structure:** A flat root folder structure where all core JavaScript logic sits alongside a dedicated `tests/` directory.
 
-- Application Purpose: A Task Manager application to create, organize, and manage to-do lists.
-- Technology Stack: Built using JavaScript and Node.js (identified via `package.json` and `.js` file extensions).
-- Codebase Structure: A flat root folder structure where all core JavaScript logic sits alongside a dedicated `tests/` directory.
+### 2. AI Analysis vs. Initial Assumptions (Misconceptions Corrected)
+* **CLI vs. Web App:** This is specifically a **Command Line Interface (CLI)** application that runs purely in the terminal (`node cli.js`). There is no front-end web UI or database server.
+* **Actual Entry Point:** `cli.js` is the true entry point where user commands enter the application, while `app.js` holds internal business logic (`TaskManager`).
+* **Data Storage:** Data is persisted directly to a local file called `tasks.json` managed via `storage.js`.
+* **Stand-alone / Modular Utilities:** `task_parser.js`, `task_priority.js`, and `task_list_merge.js` have active test suites but act as modular building blocks for future features.
 
- 
+### 3. Technology Stack & Key Libraries
+| Technology / Library | Role & Purpose |
+| :--- | :--- |
+| **Node.js** | Runtime environment executing JavaScript outside the browser. |
+| **JavaScript (CommonJS)** | Primary language using standard `require()` and `module.exports`. |
+| **`commander`** | External library in `cli.js` used to parse terminal commands and flags. |
+| **`uuid`** | Library in `models.js` used to generate unique IDs for tasks. |
+| **`Jest`** | Test runner executing automated tests in the `tests/` directory. |
+| **Node.js `fs` Module** | Built-in module used in `storage.js` to read/write task data to disk. |
 
-1. AI Analysis vs. Initial Assumptions (Misconceptions Corrected)
-
-Running the project structure prompt revealed key clarifications regarding how the application actually works:
-
-- CLI vs. Web App: I originally thought this might be a backend or general application, but it is specifically a Command Line Interface (CLI) application. It runs purely in the terminal `node cli.js`) and has no front-end web UI or database server.
-- Actual Entry Point: I assumed `app.js` was the main entry point due to its name. However, `cli.js` is the true entry point where user commands enter the application. `app.js` holds the internal business logic `TaskManager`).
-- Data Storage: Data is persisted directly to a local file called `tasks.json` managed via `storage.js`, rather than a traditional database.
-- Stand-alone / Modular Utilities: Three files `task_parser.js`, `task_priority.js`, and `task_list_merge.js`) have active test suites but are not yet imported into `cli.js` or `app.js`. They act as modular building blocks for future features (like shorthand text parsing or syncing).
-
- 
-
-1. Technology Stack & Key Libraries
-  echnology / Library  Role & Purpose 
-  ode.js  Runtime environment that executes the JavaScript code outside a browser. 
-  avaScript (CommonJS)  Primary language using standard `require()` and `module.exports` syntax. 
-  commander  `External library used in` cli.js`to parse terminal commands and flags.  uuid` Library in `models.js` used to generate unique IDs for tasks. 
-  Jest  `Test runner used in the` tests/`directory to run automated unit and integration tests.  ode.js`fs`Module  Built-in module used in`storage.js` to read and write task data to disk.
-  1. Key Components & Responsibilities (Architectural Pattern)
-
-The application follows a simple 4-layer flow when processing a command:
-
-1. `cli.js` (Front Desk / Interface):
-  - Receives user commands in the terminal (e.g., `node cli.js create`) and parses flags. Passes instructions to `app.js`.
-2. `app.js` (Business Logic Manager):
-  - Contains the `TaskManager` class. Coordinates creating, listing, updating, and deleting tasks.
-3. `models.js` (Domain Models):
-  - Defines what a "Task" object is (title, priority, status, dates, unique ID).
-4. `storage.js` (Data Storage / Persistence):
-  - Acts as the filing cabinet, handling reading from and writing to `tasks.json`.
-  1. Important Entry Points
-
-- CLI Application: `node cli.js [command]` (Primary entry point for users).
-- Automated Test Suite: `npm test` (Runs Jest against the `tests/` directory).
-
-1. Unused Modules: Are `task_parser.js`, `task_priority.js`, and `task_list_merge.js` planned to be integrated into `cli.js`, or are they standalone exercise modules?
-2. Storage Roadmap: Is local JSON file storage `tasks.json`) the long-term solution, or are there plans to migrate to a database?
-
-Testing Workflow: What is the expected development workflow when adding a feature—should we write Jest tests first, or update `cli.js` first?
+### 4. Key Components & Responsibilities
+1. **`cli.js` (Interface):** Receives user commands in the terminal and passes instructions to `app.js`.
+2. **`app.js` (Business Logic):** Contains `TaskManager`. Coordinates creating, listing, updating, and deleting tasks.
+3. **`models.js` (Domain Models):** Defines what a `Task` object is (title, priority, status, dates, unique ID).
+4. **`storage.js` (Persistence):** Handles reading from and writing to `tasks.json`.
 
 ---
 
+## Exercise Part 2: Finding Feature Implementation (Task Export to CSV)
 
+### 1. Initial Search & Approach Evaluation
+* **Search Terms Used:** `storage`, `writeFile`, `JSON`, `task`.
+* **Files Checked:** `storage.js`, `app.js`, `cli.js`.
+* **Evaluation:** Searching for file interaction terms (`writeFile`, `JSON`) led directly to `storage.js`. Feature implementation relies on identifying which module handles each stage of data flow.
 
-Exercise Part 2: Finding Feature Implementation (Task Export to CSV)
+### 2. Feature Location & Affected Components
+To add a **"Task Export to CSV"** feature, changes are divided across three key files:
+1. **`cli.js` (User Interface):** Register a new command (e.g., `node cli.js export <filename>`) using `commander`.
+2. **`app.js` (Business Logic):** Add a method (`exportTasksToCSV(filePath)`) to `TaskManager` to direct export processing.
+3. **`storage.js` (Data Handling & File I/O):** Add CSV formatting and file-writing logic using Node's `fs` module.
 
-1. Initial Search & Approach Evaluation
-
-*Search Terms Used:** `storage`**,** `writeFile`**,** `JSON`**,** `task`**.**
-
-*Files Checked:** `storage.js`**,** `app.js`**,** `cli.js`**.**
-
-*Evaluation: Searching for file interaction terms** `writeFile`**,** `JSON`**) led directly to** `storage.js`**. Because all files sit in the root directory, feature implementation relies on identifying which module handles each stage of data flow rather than navigating complex directory structures.**
-
-1. **Feature Location & Affected Components**
-
-**To add a "Task Export to CSV" feature, changes are divided across three key files:**
-
-**1.** `cli.js` **(User Interface / Entry Point):**
-
-   *** Needs a new command definition (e.g.,** `.command('export <filename>')`**) using the** `commander` **library to capture the user's terminal input.**
-
-**2.** `app.js` **(Business Logic /** `TaskManager` **Class):**
-
-   *** Needs a new method (e.g.,** `exportTasksToCSV(filePath)`**) that fetches current tasks and directs the storage layer to export them.**
-
-**3.** `storage.js` **(Data Handling & File I/O):**
-
-   *** Needs the core CSV formatting and file-writing logic (e.g., converting task objects to comma-separated strings and writing them to disk using Node's** `fs` **module).**
-
-**3. Investigation Process & Data Flow**
-
-**The complete flow for this feature follows this path:**
-
-User Terminal Command ➔ cli.js (Parses args) ➔ app.js (Business Logic) ➔ storage.js (Generates CSV & Writes File)
-
-1. Self-Assessment Questions & Navigation Patterns
-
-When exploring or validating feature locations in this codebase: 
-
-- Where does user input enter?* Look for command registrations in `cli.js`. 
-- Where does domain logic live?* Look for method definitions inside the `TaskManager` class in `app.js`. 
-- Where do side effects (file reads/writes) happen?* Look for `fs` module calls in `storage.js`.
-
- 
-
-1. Step 1: Create a helper method in `storage.js` to convert JSON tasks into CSV format and save them using `fs.writeFileSync`.
-2. Step 2: Add an `exportTasks` method to `TaskManager` in `app.js`.
-3. Step 3: Register the `export` command in `cli.js`.
-4. Step 4: Add unit tests in `tests/taskStorage.test.js` to test CSV output.
+### 3. Step-by-Step Implementation Plan
+1. **Step 1:** Create a helper method in `storage.js` to convert JSON tasks into CSV format and save them using `fs.writeFileSync`.
+2. **Step 2:** Add an `exportTasks` method to `TaskManager` in `app.js`.
+3. **Step 3:** Register the `export` command in `cli.js`.
+4. **Step 4:** Add unit tests in `tests/taskStorage.test.js` to test CSV output.
 
 ---
 
   
   
-Exercise Part 3: Understanding Domain Models & Business Concepts
+## Exercise Part 3: Understanding Domain Models & Business Concepts
 
- 
+### 1. Core Domain Entities & Glossary
+* **Task:** The central entity representing a single work item (`id`, `title`, `description`, `status`, `priority`, `dueDate`, `tags`, `timestamps`).
+* **TaskStatus:** Registry of workflow stages (`TODO`, `IN_PROGRESS`, `REVIEW`, `DONE`). Uses strings (`'todo'`, `'in_progress'`) for human readability.
+* **TaskPriority:** Registry of urgency levels (`LOW: 1`, `MEDIUM: 2`, `HIGH: 3`, `URGENT: 4`). Uses numbers so tasks can be sorted numerically by urgency.
+* **Audit Timestamps:**
+  * `createdAt`: Set once when created.
+  * `updatedAt`: Refreshed on every modification.
+  * `dueDate`: Optional target deadline.
+  * `completedAt`: Set exclusively when marked `DONE`.
 
-1. Core Domain Entities & Glossary
+### 2. Domain Model Relationship Diagram
 
-- Task: The central entity representing a single work item `id`, `title`, `description`, `status`, `priority`, `dueDate`, `tags`, `timestamps`).
-- TaskStatus: Registry of workflow stages `TODO`, `IN_PROGRESS`, `REVIEW`, `DONE`). Uses strings `'todo'`, `'in_progress'`) for human readability.
-- TaskPriority: Registry of urgency levels `LOW: 1`, `MEDIUM: 2`, `HIGH: 3`, `URGENT: 4`). Uses numbers so tasks can be sorted numerically by urgency.
-- Audit Timestamps:
+┌─────────────────────────────────┐
+             │            TASK                 │
+             │  id, title, description, tags   │
+             └───────────────┬─────────────────┘
+                             │
+   ┌─────────────────────────┼─────────────────────────┐
+   │                         │                         │
+   ▼                         ▼                         ▼
+┌──────────────┐         ┌──────────────┐         ┌──────────────┐
+│   WORKFLOW   │         │  IMPORTANCE  │         │     TIME     │
+│  TaskStatus  │         │ TaskPriority │         │              │
+│ todo         │         │ 1 LOW        │         │ createdAt    │
+│ in_progress  │         │ 2 MEDIUM     │         │ updatedAt    │
+│ review       │         │ 3 HIGH       │         │ dueDate      │
+│ done         │         │ 4 URGENT     │         │ completedAt  │
+└──────────────┘         └──────────────┘         └──────────────┘
 
-  * `createdAt`: Set once when created.
+### 3. Answers to Domain Model Assessment Questions
 
-  * `updatedAt`: Refreshed on every modification.
-
-  * `dueDate`: Optional target deadline.
-
-  * `completedAt`: Set exclusively when marked `DONE`.
-
-1. Domain Model Relationship Diagram
-
-┌─────────────────────────────────┐ │ TASK │ │ id, title, description, tags │ └───────────────┬─────────────────┘ │ ┌─────────────────────────┼─────────────────────────┐ │ │ │ ▼ ▼ ▼
-
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐ │ WORKFLOW │ │ IMPORTANCE │ │ TIME │ │ TaskStatus │ │ TaskPriority │ │ │ │ todo │ │ 1 LOW │ │ createdAt │ │ in_progress │ │ 2 MEDIUM │ │ updatedAt │ │ review │ │ 3 HIGH │ │ dueDate │ │ done │ │ 4 URGENT │ │ completedAt │ └──────────────┘ └──────────────┘ └──────────────┘
-
-1. Answers to Domain Model Assessment Questions
-2. Which task shows up in `node cli.js list -o` (Overdue)?
-
-- Only the first task (due yesterday, `IN_PROGRESS`) shows up. Overdue status relies strictly on: `dueDate < now` AND `status !== DONE`. Priority does not affect whether a task is overdue.
-
- 
-
-1. What happens when a task is completed early? Is it overdue after completion?
-
-- No, a completed task is never overdue `status === DONE` overrides overdue calculations). 
-- Marking `DONE` calls `markAsDone()`, updating both `updatedAt` and `completedAt`. Changing status to `IN_PROGRESS` only updates `status` and `updatedAt` (leaving `completedAt` as `null`).
-
- 
-
-1. Why use numbers for priority and strings for status?
-
-- Priority (Numbers 1-4): Allows mathematical comparison and sorting (e.g., `a.priority > b.priority` to show urgent tasks first). 
-- Status (Strings): Makes terminal outputs and JSON files easily human-readable without requiring a lookup key.
-
- 
-
-1. When priority changes from MEDIUM to URGENT on a task in review:
-
-- Domain state changed: `priority` (2 -> 4) and `updatedAt` timestamp. 
-- Unchanged: `status` remains `REVIEW`, `createdAt`, `dueDate`, and `completedAt` remain untouched. Workflow and urgency are independent dimensions.
-
- 
-
-1. Impact of adding a "snoozed" status:
-
-- `isOverdue()` rule: Needs evaluation (should snoozed tasks trigger overdue alerts?). 
-- `stats` command: Needs updating to count/display snoozed items. 
-- CLI & Merge logic: `cli.js` options and `task_list_merge.js` conflicts need rules for handling snoozed tasks.
+1. **Which task shows up in `node cli.js list -o` (Overdue)?**
+   * Only the first task (due yesterday, `IN_PROGRESS`) shows up. Overdue status relies strictly on: `dueDate < now` AND `status !== DONE`. Priority does not affect whether a task is overdue.
+2. **What happens when a task is completed early? Is it overdue after completion?**
+   * No, a completed task is never overdue (`status === DONE` overrides overdue calculations).
+   * Marking `DONE` calls `markAsDone()`, updating both `updatedAt` and `completedAt`. Changing status to `IN_PROGRESS` only updates `status` and `updatedAt` (leaving `completedAt` as `null`).
+3. **Why use numbers for priority and strings for status?**
+   * **Priority (Numbers 1-4):** Allows mathematical comparison and sorting (e.g., `a.priority > b.priority` to show urgent tasks first).
+   * **Status (Strings):** Makes terminal outputs and JSON files easily human-readable without requiring a lookup key.
+4. **When priority changes from MEDIUM to URGENT on a task in review:**
+   * **Domain state changed:** `priority` (2 -> 4) and `updatedAt` timestamp.
+   * **Unchanged:** `status` remains `REVIEW`, `createdAt`, `dueDate`, and `completedAt` remain untouched. Workflow and urgency are independent dimensions.
+5. **Impact of adding a "snoozed" status:**
+   * **`isOverdue()` rule:** Needs evaluation (should snoozed tasks trigger overdue alerts?).
+   * **`stats` command:** Needs updating to count/display snoozed items.
+   * **CLI & Merge logic:** `cli.js` options and `task_list_merge.js` conflicts need rules for handling snoozed tasks.
 
 ---
 
+## Exercise Part 4: Practical Application
 
+### 1. Planning: Overdue Auto-Abandonment Business Rule
+**Scenario:** *"Tasks overdue for more than 7 days should automatically be marked as 'abandoned', unless they are marked as high/urgent priority."*
 
-Exercise Part 4: Practical Application
+### Files to Modify
+1. **`models.js`:**
+   * Add `ABANDONED: 'abandoned'` to the `TaskStatus` registry.
+   * Add a business rule method to the `Task` class (e.g., `isEligibleForAbandonment()`) that checks if `isOverdue()` is true by $> 7$ days AND `priority < TaskPriority.HIGH`.
+2. **`app.js`:**
+   * Add a service/manager method `checkAndAbandonTasks()` to iterate over active tasks and update their status using the model rule.
+3. **`cli.js`:**
+   * Add or hook into an automated entry point (e.g., a `clean` command or auto-check on `list`) to trigger the abandon logic.
+4. **`tests/`:**
+   * Add unit tests in `task.test.js` to verify tasks $\le 7$ days overdue or high-priority tasks are *not* marked as abandoned.
 
-1. Planning: Overdue Auto-Abandonment Business Rule
+### Questions for the Team Before Implementing
+* **Priority Threshold:** Does "high priority" strictly mean `TaskPriority.HIGH` (3), or does it also protect `TaskPriority.URGENT` (4)?
+* **Timestamp Behavior:** Should abandoning a task record a specific `abandonedAt` date, or just update `updatedAt`?
+* **Execution Trigger:** Should this rule run automatically every time a user runs `node cli.js list`, or should it be an explicit maintenance command like `node cli.js cleanup`?
 
-Scenario: *"Tasks overdue for more than 7 days should automatically be marked as 'abandoned', unless they are marked as high/urgent priority."*
+---
 
-Files to Modify
-
-1. `models.js`:
-  - Add `ABANDONED: 'abandoned'` to the `TaskStatus` registry.
-  - Add a business rule method to the `Task` class (e.g., `isEligibleForAbandonment()`) that checks if `isOverdue()` is true by $> 7$ days AND `priority < TaskPriority.HIGH`.
-2. `app.js`:
-  - Add a service/manager method `checkAndAbandonTasks()` to iterate over active tasks and update their status using the model rule.
-3. `cli.js`:
-  - Add or hook into an automated entry point (e.g., a `clean` command or auto-check on `list`) to trigger the abandon logic.
-4. `tests/`:
-  *Add unit tests in* `task.test.js` *to verify tasks $\le 7$ days overdue or high-priority tasks are* not* marked as abandoned.
-
-Questions for the Team Before Implementing
-
-- Priority Threshold: Does "high priority" strictly mean `TaskPriority.HIGH` (3), or does it also protect `TaskPriority.URGENT` (4)?
-- Timestamp Behavior: Should abandoning a task record a specific `abandonedAt` date, or just update `updatedAt`?
-- Execution Trigger: Should this rule run automatically every time a user runs `node cli.js list`, or should it be an explicit maintenance command like `node cli.js cleanup`?
-
-1. Reflection
-
-- How AI Prompts Helped: The structured prompts made it easy to trace how data flows from user commands down to file I/O, helping separate interface code `cli.js`) from pure domain logic `models.js`).
-- Remaining Codebase Questions: How tasks will be synced or merged across external instances using `task_list_merge.js`.
-- Next Steps for Growth: Build unit tests for edge cases (e.g., leap years or timezone shifts when calculating the 7-day overdue difference) and implement the CSV export feature end-to-end.
-
+### 2. Reflection
+* **How AI Prompts Helped:** The structured prompts made it easy to trace how data flows from user commands down to file I/O, helping separate interface code (`cli.js`) from pure domain logic (`models.js`).
+* **Remaining Codebase Questions:** How tasks will be synced or merged across external instances using `task_list_merge.js`.
+* **Next Steps for Growth:** Build unit tests for edge cases (e.g., leap years or timezone shifts when calculating the 7-day overdue difference) and implement the CSV export feature end-to-end.
