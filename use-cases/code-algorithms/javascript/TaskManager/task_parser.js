@@ -1,20 +1,41 @@
 const {TaskPriority, Task} = require("./models");
 
+/**
+ * Parses free-form task input into a Task object by extracting metadata tokens
+ * from the text and removing those tokens from the resulting title.
+ *
+ * Supported markers:
+ * - @tag adds one or more tags
+ * - !1, !2, !3, !4 or !low, !medium, !high, !urgent sets priority
+ * - #today, #now, #tomorrow, #next_week, #nextweek, weekday names,
+ *   or #YYYY-MM-DD sets a due date
+ *
+ * The parser treats the remaining plain text as the task title, normalizes
+ * repeated whitespace, and creates a new Task instance with the parsed fields.
+ *
+ * @param {string} text - Raw task description containing optional markers.
+ * @returns {Task} A new Task instance populated with the parsed title,
+ * priority, due date, and tags.
+ * @throws {TypeError} If text is not a string or does not support trim().
+ *
+ * @example
+ * const task = parseTaskFromText("Buy milk @shopping !2 #tomorrow");
+ * console.log(task.title); // "Buy milk"
+ * console.log(task.priority); // TaskPriority.MEDIUM
+ * console.log(task.tags); // ["shopping"]
+ *
+ * @example
+ * const urgentTask = parseTaskFromText("Finish report !urgent #friday @work @project");
+ * console.log(urgentTask.priority); // TaskPriority.URGENT
+ *
+ * @note
+ * - Only the first recognized due date marker is applied. Once a valid date
+ *   token is parsed, the loop stops.
+ * - Unknown or unsupported markers are ignored.
+ * - If no valid date marker is found, dueDate remains null.
+ * - If no priority marker is found, the default priority is TaskPriority.MEDIUM.
+ */
 function parseTaskFromText(text) {
-  /**
-   * Parse free-form text to extract task properties.
-   *
-   * Examples of format it can parse:
-   * "Buy milk @shopping !2 #tomorrow"
-   * "Finish report for client XYZ !urgent #friday #work @project"
-   *
-   * Where:
-   * - Basic text is the task title
-   * - @tag adds a tag
-   * - !N sets priority (1=low, 2=medium, 3=high, 4=urgent)
-   * - !urgent/!high/!medium/!low sets priority by name
-   * - #date sets a due date
-   */
 
   // Default task properties
   let title = text.trim();
@@ -131,6 +152,16 @@ function parseTaskFromText(text) {
   return task;
 }
 
+/**
+ * Returns the next occurrence of a specific weekday after the provided date.
+ *
+ * If the supplied date is already the requested weekday, the function returns
+ * the next week's occurrence rather than the same day.
+ *
+ * @param {Date} currentDate - The reference date from which to search.
+ * @param {number} targetDay - A weekday index where 0 = Sunday and 6 = Saturday.
+ * @returns {Date} A new Date instance representing the next matching weekday.
+ */
 function getNextWeekday(currentDate, targetDay) {
   // Get the next occurrence of a specific weekday
   const result = new Date(currentDate);
