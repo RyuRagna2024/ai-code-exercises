@@ -315,3 +315,188 @@ save() {
 
 * **Current Architecture (*In-Memory Hash Map with File Flush*):** Fast in-memory access during process execution, but blurs boundaries by requiring explicit calls to `this.storage.save()` after domain object mutations.
 * **Alternative Model (*Explicit Read → Transform → Write Pipeline*):** For a short-lived CLI execution, a stateless pipeline that loads the file, applies a functional transformation, and immediately writes back to disk would enforce clearer layer boundaries and reduce state desynchronization risks.
+
+---
+
+# Exercise: Algorithm Deconstruction Challenge
+
+## Algorithm 1: Task Priority Sorting Algorithm
+
+### 4. Validation Questions & Answers
+
+1. **Why might a low-priority task that is overdue outrank a high-priority task that is due next week?**
+   * **Answer:** A `LOW` priority task has a base score of 10 ($1 \times 10$). Because it is overdue, it receives a large +30 urgency bonus. If it also has a tag like `blocker` (+8), its total score reaches 48. A `HIGH` priority task has a base score of 30 ($3 \times 10$). If it is due next week (5 days away), it receives a +10 bonus, giving it a total score of 40. The algorithm intentionally weighs immediate deadline pressure higher than static base priority to prevent neglected low-priority work from falling behind indefinitely.
+
+2. **What happens to a task’s score if it is marked as done, and why does that matter for ranking?**
+   * **Answer:** When a task status is set to `DONE`, it receives a heavy penalty of -50 points (`score -= 50`). Even if a task had maximum pre-penalty score (e.g., `URGENT` base 40 + overdue +30 + critical tag +8 = 78), its score drops to 28. Most actionable `TODO` tasks will score above 28, effectively pushing completed work to the bottom of the list without needing to delete it from the system.
+
+3. **If you had thousands of tasks, what performance issue would appear with the current sorting approach, and how would you improve it?**
+   * **Answer:** The current implementation calls `calculateTaskScore` inside the comparator function passed to `.sort()`. Standard sort algorithms perform $O(N \log N)$ comparisons, meaning `calculateTaskScore` could be invoked $2N \log N$ times—re-instantiating `Date` objects and parsing strings repeatedly for the exact same task. To improve performance, use a **Map-Sort-Map (Schwartzian Transform)** pattern to pre-calculate each task's score once in a single $O(N)$ pass before sorting.
+
+### 1. Algorithm Overview & Purpose
+The `calculateTaskScore` and `sortTasksByImportance` functions implement a **weighted composite scoring heuristic**. It evaluates multiple dynamic signals per task (base priority, deadline proximity, completion status, critical tags, and recent updates) to condense overall urgency into a single numerical score, then orders the tasks from highest score to lowest.
+
+---
+
+### 2. Breakdown of Scoring Factors
+
+```text
+  [ Base Priority ]  ──────> LOW (10) | MEDIUM (20) | HIGH (30) | URGENT (40)
+         │
+         ├─── [+] [ Due Date Urgency ]  ──> Overdue (+30) | Today (+20) | <=2d (+15) | <=7d (+10)
+         ├─── [-] [ Status Penalty ]   ──> DONE (-50) | REVIEW (-15)
+         ├─── [+] [ Critical Tags ]    ──> "blocker"/"critical"/"urgent" (+8)
+         └─── [+] [ Freshness Boost ]  ──> Updated < 24 hours ago (+5)
+                                 │
+                                 ▼
+                     Total Calculated Score
+
+* **Base Priority Weighting:** Establishes initial importance: Priority Weight * 10 (`LOW` = 10, `MEDIUM` = 20, `HIGH` = 30, `URGENT` = 40).
+* **Due Date Proximity:** Adds dynamic urgency based on days remaining (< 0 days = +30, 0 days = +20, <= 2 days = +15, <= 7 days = +10).
+* **Status Adjustment:** Penalizes inactive/non-actionable states (`DONE` = -50, `REVIEW` = -15).
+* **Tag & Recency Boosts:** Adds small score increases for critical labels (+8) and recent updates within 24 hours (+5).
+
+---
+
+### 3. Key Findings & Performance Optimization
+
+#### A. Array Immutability
+`[...tasks].sort(...)` uses the spread operator to shallow-copy the array before sorting, avoiding unwanted side-effects on the original list.
+
+#### B. Sorting Efficiency Concern
+* **Problem:** Calling `calculateTaskScore` inside `.sort()` repeatedly recalculates the score for the same task multiple times during comparison cycles, re-instantiating `Date` objects each time.
+* **Optimization:** For large datasets, use a **Map-Sort-Map (Schwartzian Transform)** pattern to pre-calculate scores in a single O(N) pass before running O(N log N) sorting.
+
+// Optimized approach for large datasets
+function sortTasksOptimized(tasks) {
+  return tasks
+    .map(task => ({ task, score: calculateTaskScore(task) }))
+    .sort((a, b) => b.score - a.score)
+    .map(entry => entry.task);
+}
+
+## Algorithm 2: Task Text Parser (`task_parser.js`)
+
+### 4. Validation Questions & Answers
+
+1. **If a task contains both `!urgent` and `#tomorrow`, what fields should be set on the resulting Task object?**
+   * **Answer:** `priority` is set to `TaskPriority.URGENT` (`4`), and `dueDate` is set to tomorrow's date (with time zeroed to `00:00:00`). The title is cleaned to remove both tokens.
+
+2. **What happens to the original markers like `!high`, `@work`, and `#friday` after parsing—are they preserved in the title?**
+   * **Answer:** They are stripped out via regular expression replacement (`replace(/\s!([1-4]|urgent|high|medium|low)\b/i, '')`, `replace(/\s@\w+/g, '')`, etc.) and multi-space whitespace is collapsed. They become structured object properties instead of remaining raw text in the title.
+
+3. **Why does the parser stop after the first recognized due date token instead of collecting multiple due dates?**
+   * **Answer:** A task can only have a single deadline (`dueDate` property). The loop uses `break` as soon as a valid date token matches so that the first specified date token takes precedence and avoids overwriting with subsequent date markers.
+
+4. **What would happen if the input contained an unknown marker like `!5` or `#nextmonth`?**
+   * **Answer:** Unsupported markers fail the regex match or the `if/else` date evaluation. As a result, `!5` is not recognized as a priority (falling back to default `MEDIUM`), `#nextmonth` is not parsed into a `dueDate` (remaining `null`), and because they don't match the strict extraction regex patterns, they may remain as plain text inside the task title.
+
+### 1. Algorithm Overview & Purpose
+The `parseTaskFromText` function acts as a lightweight Domain-Specific Language (DSL) tokenizer and normalizer. It converts a single free-form input string (e.g., `"Buy milk !urgent @shopping #tomorrow"`) into a structured `Task` instance with explicit properties (`title`, `priority`, `tags`, `dueDate`).
+
+---
+
+### 2. Token Extraction & Processing Pipeline
+
+```text
+  Raw Text Input ("Buy milk !urgent @shopping #tomorrow")
+                             │
+     ┌───────────────────────┼───────────────────────┐
+     ▼                       ▼                       ▼
+[!Priority Tokens]       [@Tag Tokens]        [#Date Tokens]
+(!1..4, !urgent, etc.)   (@shopping, @work)   (#today, #tomorrow, YYYY-MM-DD)
+     │                       │                       │
+     ▼                       ▼                       ▼
+Map to TaskPriority    Extract into Tags[]   Calculate Due Date
+& Remove Token         & Remove Token        & Break Loop (First Match)
+     └───────────────────────┬───────────────────────┘
+                             │
+                             ▼
+                Whitespace Normalization
+                             │
+                             ▼
+             Clean Title ("Buy milk") + Task Entity
+
+* **Default-and-Override Strategy:** Initialized with default state (`title = text`, `priority = MEDIUM`, `dueDate = null`, `tags = []`).
+* **Regex Token Matching:**
+  * `\s!([1-4]|urgent|high|medium|low)\b`: Maps numeric/named priority levels to `TaskPriority` enum values and strips the marker.
+  * `\s@(\w+)`: Iteratively populates the `tags` array and strips `@tag` markers from the title.
+  * `\s#(\w+)`: Extracts date tokens, evaluates relative days (`today`, `tomorrow`, `next_week`, weekdays via `getNextWeekday`), or parses `YYYY-MM-DD` strings.
+* **Title Normalization:** Multi-space gaps left by removed tokens are collapsed with `replace(/\s+/g, ' ').trim()`.
+
+---
+
+### 3. Key Insights & Design Patterns
+
+* **Tokenizer / Normalizer Pattern:** Separates raw user input into structured metadata while stripping syntax markers to keep display titles clean.
+* **Helper Isolation (`getNextWeekday`):** Uses modular date arithmetic `(targetDay + 7 - currentDate.getDay()) % 7` to resolve relative weekday names without mutating original dates.
+* **First-Match Short-Circuiting:** Ensures that only the first valid date marker populates `dueDate` via `break`, preventing conflicting date overrides.
+
+---
+
+## Algorithm 3: Task List Merging — Two-Way Sync (`task_list_merge.js`)
+
+### 4. Validation Questions & Answers
+
+1. **If two copies of the same task have different titles and the remote one is newer, which title should end up in the merged task, and why?**
+   * **Answer:** The remote title wins. The algorithm uses a "Last-Write-Wins" (LWW) policy based on the `updatedAt` timestamp (`remoteDate > localDate`). Since the remote task was modified more recently, its field values overwrite the local ones, and `shouldUpdateLocal` is set to `true` to signal that the local store must be updated.
+
+2. **Why does a completed task override the usual “newer timestamp wins” rule?**
+   * **Answer:** In task management domain logic, marking a task as completed (`DONE`) is a terminal, high-priority state transition. The system prioritizes preserving completed work over timestamp freshness to prevent an offline or stale device from reverting a completed task back to `TODO`.
+
+3. **If local has tags `["a", "b"]` and remote has `["b", "c"]`, what should the merged tags be, and which side(s) should be updated?**
+   * **Answer:** The merged tags will be `["a", "b", "c"]` (a mathematical Set union). Since the merged set differs from both local (`["a", "b"]`) and remote (`["b", "c"]`), both `shouldUpdateLocal` and `shouldUpdateRemote` will be set to `true` so both stores receive the complete union of tags.
+
+### 1. Algorithm Overview & Purpose
+The `mergeTaskLists` and `resolveTaskConflict` functions implement a **two-way differential state reconciliation algorithm** with policy-driven conflict resolution. It synchronizes tasks between a local and remote data store, building a unified task state (`mergedTasks`) while flagging directional mutation requirements (`toCreateRemote`, `toUpdateRemote`, `toCreateLocal`, `toUpdateLocal`).
+
+---
+
+### 2. Synchronization & Conflict Resolution Flow
+
+```text
+                  Local Tasks & Remote Tasks
+                               │
+                               ▼
+                    [ Extract Unique Task IDs ]
+                               │
+         ┌─────────────────────┼─────────────────────┐
+         ▼                     ▼                     ▼
+[ Local Only Task ]    [ Shared Task ID ]    [ Remote Only Task ]
+         │                     │                     │
+         ▼                     ▼                     ▼
+• Add to mergedTasks  Resolve Conflicts:      • Add to mergedTasks
+• Add to              • Field LWW Policy      • Add to
+  toCreateRemote      • Terminal DONE Override  toCreateLocal
+                      • Set Tag Union
+                               │
+                               ▼
+                       Evaluate Differences:
+                       • If Local changed  ──> toUpdateLocal
+                       • If Remote changed ──> toUpdateRemote
+
+* **ID Union Discovery:** `new Set([...Object.keys(localTasks), ...Object.keys(remoteTasks)])` discovers all unique tasks across both environments.
+* **One-Sided Assignment:** Tasks present in only one environment are added to `mergedTasks` and queued for creation in the opposite store (`toCreateRemote` or `toCreateLocal`).
+* **Conflict Resolution Policies:**
+  * **Last-Write-Wins (LWW):** Standard fields (`title`, `description`, `priority`, `dueDate`) adopt the values of whichever task has the most recent `updatedAt` timestamp.
+  * **Terminal State Override:** If either side marks a task as `DONE`, the merged task becomes `DONE` regardless of which version has a newer timestamp.
+  * **Set Union for Tags:** Tags from both sources are combined into a single array with duplicates removed (`[...new Set([...localTask.tags, ...remoteTask.tags])]`). Order-insensitive array comparison (`arraysEqual`) determines if sync flags need to be raised.
+
+---
+
+### 3. Key Insights & Design Patterns
+
+* **Reconciliation & Diff Marker Pattern:** Rather than mutating databases directly inside the algorithm, it returns pure change buckets (`toCreate*`, `toUpdate*`) allowing calling persistence layers to execute batch writes safely.
+* **Domain-Specific Conflict Resolution:** Blends timestamp-based LWW with state-priority overrides (`DONE` state retention and Set-based tag unions) suited for multi-device sync.
+* **Order-Insensitive Equality Check:** `arraysEqual` sorts tag copies before performing element checks, preventing unnecessary network sync operations when tag arrays contain identical items in different order.
+
+### 4. Validation Questions & Answers
+
+1. **If two copies of the same task have different titles and the remote one is newer, which title should end up in the merged task, and why?**
+   * **Answer:** The remote title wins. The algorithm uses a "Last-Write-Wins" (LWW) policy based on the `updatedAt` timestamp (`remoteDate > localDate`). Since the remote task was modified more recently, its field values overwrite the local ones, and `shouldUpdateLocal` is set to `true` to signal that the local store must be updated.
+
+2. **Why does a completed task override the usual “newer timestamp wins” rule?**
+   * **Answer:** In task management domain logic, marking a task as completed (`DONE`) is a terminal, high-priority state transition. The system prioritizes preserving completed work over timestamp freshness to prevent an offline or stale device from reverting a completed task back to `TODO`.
+
+3. **If local has tags `["a", "b"]` and remote has `["b", "c"]`, what should the merged tags be, and which side(s) should be updated?**
+   * **Answer:** The merged tags will be `["a", "b", "c"]` (a mathematical Set union). Since the merged set differs from both local (`["a", "b"]`) and remote (`["b", "c"]`), both `shouldUpdateLocal` and `shouldUpdateRemote` will be set to `true` so both stores receive the complete union of tags.
