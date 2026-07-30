@@ -500,3 +500,226 @@ The `mergeTaskLists` and `resolveTaskConflict` functions implement a **two-way d
 
 3. **If local has tags `["a", "b"]` and remote has `["b", "c"]`, what should the merged tags be, and which side(s) should be updated?**
    * **Answer:** The merged tags will be `["a", "b", "c"]` (a mathematical Set union). Since the merged set differs from both local (`["a", "b"]`) and remote (`["b", "c"]`), both `shouldUpdateLocal` and `shouldUpdateRemote` will be set to `true` so both stores receive the complete union of tags.
+
+# Exercise: Code Documentation
+
+## Sub-Exercise 1: Inline JSDoc & Function Documentation (`task_parser.js`)
+
+### 1. Documented Source Code (Prompt 1: Comprehensive JSDoc)
+const { TaskPriority, Task } = require('./models');
+
+/**
+ * Parses a single raw text string containing embedded DSL metadata tokens 
+ * into a structured Task domain instance.
+ *
+ * Supported token syntax:
+ * - Priority: `!1`, `!2`, `!3`, `!4` or `!low`, `!medium`, `!high`, `!urgent`
+ * - Tags: `@tagname` (can occur multiple times)
+ * - Due Dates: `#today`, `#tomorrow`, `#next_week`, `#monday` through `#sunday`, or `#YYYY-MM-DD`
+ *
+ * @param {string} text - The raw user input string containing title and optional tokens.
+ * @returns {Task} A new Task domain instance initialized with extracted attributes and clean title.
+ * @throws {TypeError} If the `text` parameter is not a primitive string.
+ *
+ * @example
+ * const task = parseTaskFromText("Submit report !urgent @work #tomorrow");
+ * console.log(task.title);    // "Submit report"
+ * console.log(task.priority); // 4 (TaskPriority.URGENT)
+ * console.log(task.tags);     // ["work"]
+ * console.log(task.dueDate);  // [Date object set to tomorrow at 00:00:00]
+ *
+ * @note
+ * - Tokens are stripped from the final task title; multi-space gaps are collapsed.
+ * - Only the first valid date token `#...` is parsed; subsequent date tokens are ignored.
+ * - Unsupported tokens (e.g. `!5` or `#nextmonth`) are not parsed and remain as plain text in the title.
+ */
+function parseTaskFromText(text) {
+  if (typeof text !== 'string') {
+    throw new TypeError('Input text must be a string');
+  }
+
+  let title = text;
+  let priority = TaskPriority.MEDIUM;
+  let dueDate = null;
+  const tags = [];
+
+  // Parse a shorthand priority token like !high or !3 and map it to a TaskPriority value.
+  const priorityMatch = title.match(/\s!([1-4]|urgent|high|medium|low)\b/i);
+  if (priorityMatch) {
+    const pVal = priorityMatch[1].toLowerCase();
+    if (pVal === '1' || pVal === 'low') priority = TaskPriority.LOW;
+    else if (pVal === '2' || pVal === 'medium') priority = TaskPriority.MEDIUM;
+    else if (pVal === '3' || pVal === 'high') priority = TaskPriority.HIGH;
+    else if (pVal === '4' || pVal === 'urgent') priority = TaskPriority.URGENT;
+
+    title = title.replace(priorityMatch[0], '');
+  }
+
+  // Collect all tag tokens such as @work or @shopping and remove them from the title.
+  const tagRegex = /\s@(\w+)/g;
+  let tagMatch;
+  while ((tagMatch = tagRegex.exec(title)) !== null) {
+    tags.push(tagMatch[1]);
+  }
+  title = title.replace(/\s@\w+/g, '');
+
+  // Resolve the first supported due-date shorthand into a concrete Date object.
+  const dateRegex = /\s#(\w+|-+)/g;
+  let dateMatch;
+  while ((dateMatch = dateRegex.exec(title)) !== null) {
+    const token = dateMatch[1].toLowerCase();
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    // Stop at the first valid date token; the current implementation does not support multiple due dates.
+    if (token === 'today') {
+      dueDate = now;
+      break;
+    } else if (token === 'tomorrow') {
+      const d = new Date(now);
+      d.setDate(d.getDate() + 1);
+      dueDate = d;
+      break;
+    } else if (token === 'next_week') {
+      const d = new Date(now);
+      d.setDate(d.getDate() + 7);
+      dueDate = d;
+      break;
+    } else if (['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].includes(token)) {
+      const dayMap = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
+      dueDate = getNextWeekday(now, dayMap[token]);
+      break;
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(token)) {
+      const d = new Date(token);
+      if (!isNaN(d.getTime())) {
+        dueDate = d;
+        break;
+      }
+    }
+  }
+  title = title.replace(/\s#[\w-]+/g, '');
+
+  // Normalize whitespace so the remaining text becomes a clean task title.
+  title = title.replace(/\s+/g, ' ').trim();
+
+  return new Task({
+    title,
+    priority,
+    dueDate,
+    tags,
+  });
+}
+
+/**
+ * Calculates the next occurrence of a target day of the week from a base date.
+ *
+ * @param {Date} baseDate - Starting reference date.
+ * @param {number} targetDay - Day index (0 = Sunday, 1 = Monday, ..., 6 = Saturday).
+ * @returns {Date} A new Date instance set to midnight of the target weekday.
+ */
+function getNextWeekday(baseDate, targetDay) {
+  const result = new Date(baseDate);
+  const currentDay = result.getDay();
+  let daysAhead = targetDay - currentDay;
+  if (daysAhead <= 0) {
+    daysAhead += 7;
+  }
+  result.setDate(result.getDate() + daysAhead);
+  return result;
+}
+
+module.exports = { parseTaskFromText };
+
+---
+
+### 2. Intent and Logic Breakdown (Prompt 2 Output)
+
+#### High-Level Purpose
+This module acts as a compact **text-to-task tokenizer and normalizer** (not a full natural language processing engine). It scans free-form command-line string inputs (e.g., `"Buy milk @shopping !2 #tomorrow"`) for embedded metadata markers, extracts those values into structured task attributes (`priority`, `tags`, `dueDate`), and strips the markers to leave a clean display `title`.
+
+#### Step-by-Step Logic Pipeline
+1. **Type Guarding & Defaults:** Ensures input is a primitive string (`TypeError` thrown otherwise). Initializes fallback values (`priority = TaskPriority.MEDIUM`, `dueDate = null`, `tags = []`).
+2. **Priority Extraction:** Scans for `\s!([1-4]|urgent|high|medium|low)\b`. If matched, maps the value to the `TaskPriority` enum (`1` to `4`) and removes the token from the working title.
+3. **Tag Extraction:** Scans iteratively for `\s@(\w+)` markers, pushing each match into the `tags` array and stripping `@tagname` strings from the working title.
+4. **Due Date Resolution:** Evaluates `\s#(\w+|-+)` tokens against supported shorthand:
+   - Relative offsets (`#today`, `#tomorrow`, `#next_week`).
+   - Relative weekdays (`#monday` through `#sunday`) using `getNextWeekday()`.
+   - ISO date strings (`#YYYY-MM-DD`).
+   - Uses `break` on the first valid match so subsequent `#date` tokens are ignored.
+5. **Title Normalization:** Strips remaining date patterns and collapses multi-space gaps using `replace(/\s+/g, ' ').trim()`.
+6. **Task Instantiation:** Constructs and returns a new `Task` domain object using the normalized attributes.
+
+---
+
+### Critical Edge Cases & Potential Improvements
+
+#### Discovered Edge Cases
+* **Leading Tokens:** Regex patterns rely on a leading whitespace prefix (`\s!`, `\s@`, `\s#`). If a command starts directly with a token at index 0 (e.g., `!urgent Buy milk`), the token fails to match and remains in the title.
+* **Date Parsing Regex Brittleness:** The regex `\s#(\w+|-+)` relies on standard word characters and hyphens. ISO strings like `#2026-07-30` work, but non-standard variations can fail silent extraction.
+* **Constructor Mismatch Risk:** `parseTaskFromText` returns `new Task({ title, priority, dueDate, tags })` (passing an options object). If the `Task` domain constructor expects positional arguments (e.g. `new Task(title, description, priority)`), this causes instantiation issues.
+
+#### Refactoring Recommendations
+* **Lookup Map Refactoring:** Replace the long `if/else` priority matching block with a clean JavaScript object map (e.g., `{ '1': TaskPriority.LOW, 'urgent': TaskPriority.URGENT }`).
+* **Leading Space Normalization:** Pre-trim the raw text or prefix it with a space (`' ' + text`) before matching so leading tokens at position 0 are captured correctly.
+* **Date Loop Optimization:** Instantiate `const now = new Date()` once outside the regex loop rather than re-creating `new Date()` inside every iteration.
+
+---
+
+### Reflection on Code Documentation Prompts
+
+1. **Which parts of the documentation were most challenging for the AI?**
+   - Identifying architectural mismatches outside the isolated file context—such as verifying whether `new Task({...})` matched the actual positional arguments expected in `models.js`—required cross-referencing external files beyond the prompt snippet itself.
+
+2. **What additional information needed to be provided in prompts?**
+   - Explicit domain constraints (such as the exact numeric mapping of `TaskPriority` enums) and specific input formatting rules (like requiring leading whitespace before regex tags) had to be validated against existing project findings.
+
+3. **How to apply this approach in personal projects:**
+   - Use **Prompt 1** to quickly generate syntax-compliant API/JSDoc references, follow up with **Prompt 2** to discover logic flaws, edge cases, and refactoring targets, and finish with **Prompt 3** whenever code needs to adhere to a team-specific styling guide (e.g., Google or NumPy docstrings).
+
+### 3. Documentation Style Conversion (Prompt 3: Alternative Style Conversion)
+### 3. Documentation Style Conversion (Prompt 3 Output)
+
+#### Conversion Context
+- **Original Style:** Standard JSDoc (`@param`, `@returns`, `@throws`)
+- **Target Style:** Google Style JSDoc (`Args:`, `Returns:`, `Raises:`)
+- **Language:** JavaScript
+
+#### Converted Google-Style JSDoc
+
+```javascript
+/**
+ * Parses a raw task description string into a Task object.
+ *
+ * The function extracts lightweight metadata tokens embedded in the input
+ * text and uses them to populate the resulting Task. Supported tokens include
+ * priority markers, tags, and due-date markers. Any recognized tokens are
+ * removed from the final title, and remaining whitespace is normalized.
+ *
+ * Supported token syntax:
+ * - Priority: !1, !2, !3, !4 or !low, !medium, !high, !urgent
+ * - Tags: @tagname (multiple tags may be present)
+ * - Due dates: #today, #tomorrow, #next_week, #monday through #sunday,
+ *   or #YYYY-MM-DD
+ *
+ * Args:
+ *   text: string. The raw user input containing the task title and optional
+ *        metadata tokens.
+ *
+ * Returns:
+ *   Task. A new Task instance initialized with the parsed title, priority,
+ *   due date, and tags.
+ *
+ * Raises:
+ *   TypeError: If the text parameter is not a string.
+ *
+ * Example:
+ *   const task = parseTaskFromText('Submit report !urgent @work #tomorrow');
+ *   console.log(task.title);     // 'Submit report'
+ *   console.log(task.priority);  // TaskPriority.URGENT
+ *   console.log(task.tags);      // ['work']
+ *
+ * Notes:
+ *   - Recognized tokens are stripped from the final title.
+ *   - Only the first valid date token is parsed; later date tokens are ignored.
+ *   - Unsupported tokens are left in the title as plain text.
+ */
