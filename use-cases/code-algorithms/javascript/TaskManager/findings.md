@@ -723,3 +723,25 @@ This module acts as a compact **text-to-task tokenizer and normalizer** (not a f
  *   - Only the first valid date token is parsed; later date tokens are ignored.
  *   - Unsupported tokens are left in the title as plain text.
  */
+
+---
+
+## Exercise: API Documentation Reflections
+
+### Key Takeaways & Learnings
+
+1. **Which parts of the API were most challenging to document?**
+   - **Query Parameter Types:** Identifying that parameters passed in URLs are naturally strings, but need to be parsed into numbers (e.g., `parseFloat(minPrice)`) or checked as specific strings (e.g., `inStock === 'true'`).
+   - **Error Handling Details:** Understanding the difference between client-side errors (`400 Bad Request` or `404 Not Found`) versus unexpected database failures (`500 Internal Server Error`).
+
+2. **How prompts were adjusted for better results:**
+   - Asking the AI to explicitly separate parameters into `Path`, `Query`, and `Body` tables ensured no hidden parameters were missed.
+   - Requesting reusable schemas (`components/schemas`) in OpenAPI prompt generation produced cleaner, modular YAML instead of messy duplicate code blocks.
+
+3. **Which documentation format was most effective?**
+   - **OpenAPI 3.0 (YAML):** Best for technical systems, automated testing, and generating interactive API documentation pages (like Swagger UI).
+   - **Developer Usage Guide (Markdown):** Best for human onboarding, as it gives junior developers clear code examples and step-by-step instructions.
+
+4. **Incorporating this approach into personal development workflows:**
+   - Generate OpenAPI definitions early when planning an API so team members know what endpoints will look like before coding begins.
+   - Use AI prompts to auto-generate markdown developer guides whenever backend endpoints are updated.
