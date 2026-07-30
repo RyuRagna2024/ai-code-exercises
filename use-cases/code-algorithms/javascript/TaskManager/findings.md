@@ -745,3 +745,32 @@ This module acts as a compact **text-to-task tokenizer and normalizer** (not a f
 4. **Incorporating this approach into personal development workflows:**
    - Generate OpenAPI definitions early when planning an API so team members know what endpoints will look like before coding begins.
    - Use AI prompts to auto-generate markdown developer guides whenever backend endpoints are updated.
+
+```
+## Exercise: README and User Guide Documentation Reflections
+
+### Submission Overview
+- **Chosen Project:** Task Manager CLI (Option 3)
+- **Files Created / Used:**
+  1. `README.md` (Main project landing page and command reference)
+  2. `user_guide.md` (Step-by-step task creation and tracking guide)
+  3. `faq.md` (Frequently asked questions about CLI usage and testing)
+
+---
+
+### Reflection Answers
+
+1. **Which aspects of the project were most challenging to document?**
+   - Documenting CLI command variations (flags and options) clearly so users know exact syntax patterns (`-p`, `-s`, `-t`).
+   - Explaining data persistence (`tasks.json`) and testing routines without cluttering the basic setup steps.
+
+2. **How prompts were adjusted for better results:**
+   - Providing explicit command flags (`create <title> [options]`) ensured the generated user guides were concrete and executable.
+   - Breaking the FAQ down into Getting Started, Usage, and Testing categories improved readability.
+
+3. **What was learned about document structure and organization:**
+   - Having separate dedicated files (`user_guide.md`, `faq.md`) keeps the main `README.md` clean while providing deep-dive documentation for users who need step-by-step help.
+
+4. **Incorporating this approach into my development workflow:**
+   - Document CLI commands and options continuously as new features are added.
+   - Maintain automated Jest test suites alongside code changes to keep documentation accurate.
