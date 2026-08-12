@@ -937,3 +937,96 @@ ORDER BY o.order_date DESC;
 - **Analyze Execution Plans:** Use `EXPLAIN ANALYZE` in PostgreSQL to identify sequential scans, high-cost nodes, and missing index opportunities.
 - **Prompt Applicability:** **Prompt 3 (Slow Database Query Analysis)** was the only valid template for this issue. Prompts 1 and 2 were excluded because the bottleneck was strictly database-bound rather than application memory or CPU bound.
 
+===
+
+## Exercise: AI Solution Verification Challenge
+
+### Submission Overview
+- **Chosen Problem:** Buggy Sorting Function (`mergeSort` in JavaScript)
+- **Files Created / Used:** `findings.md`
+
+---
+
+### Bug Identification & Analysis
+
+#### Bug Description
+In the original `merge` function, during the step where remaining elements from the `left` array are copied over after the main comparison loop, the code contains an infinite loop/out-of-bounds error:
+
+```javascript
+// Bug in original code:
+while (i < left.length) {
+  result.push(left[i]);
+  j++; // Bug: incrementing j instead of i, leading to an infinite loop
+}
+
+Because i is never incremented, the loop continues indefinitely when left has leftover elements, causing a maximum call stack/heap out-of-memory crash.
+
+### Verification Strategy Application
+
+#### 1. Collaborative Solution Verification (Prompt 1 Applied)
+- **Proposed Test Cases:**
+  1. **Unbalanced Arrays:** `[5, 4, 3, 2, 1]` (forces uneven leftovers on split branches).
+  2. **Duplicates & Presorted Data:** `[1, 2, 2, 1]` and `[1, 2, 3, 4]`.
+  3. **Edge Cases:** Empty array `[]`, single-element array `[42]`, and arrays with negative numbers `[-3, 0, 2, -1]`.
+- **Verification Result:** The solution was verified by tracing execution steps manually and running tests. Correcting `j++` to `i++` resolves the infinite loop while maintaining $O(n \log n)$ time complexity.
+
+#### 2. Learning Through Alternative Approaches (Prompt 2 Applied)
+- **Approach A (Iterative In-Place Mutation with `.concat()` / `.slice()`):**
+  Using `.concat(left.slice(i)).concat(right.slice(j))` eliminates manual `while` cleanup loops altogether:
+  ```javascript
+  return result.concat(left.slice(i)).concat(right.slice(j));
+
+- **Approach B (Built-in Array.prototype.sort()):**
+  Uses Timsort in modern engines ($O(n \log n)$ time, highly optimized C++ implementation in V8).
+
+- **Comparison Trade-offs:**
+  - **Manual Merge Loop:** Best for learning recursion and core DSA principles.
+  - **Array Slicing (`.concat()`):** Cleaner and less prone to manual counter increment bugs (`i++`/`j++`).
+  - **Native `.sort()`:** Best for production applications due to engine-level optimization.
+
+#### 3. Developing a Critical Eye (Prompt 3 Applied)
+- **Assumptions Checked:**
+  - **Stability:** The comparison `if (left[i] <= right[j])` must use `<=` instead of `<` to preserve relative ordering of equal elements (ensuring stable sorting).
+  - **Type Assumptions:** Expects arrays with uniform, comparable primitive elements (numbers/strings).
+
+## Verified Implementation
+  function mergeSort(arr) {
+  if (arr.length <= 1) return arr;
+
+  const mid = Math.floor(arr.length / 2);
+  const left = mergeSort(arr.slice(0, mid));
+  const right = mergeSort(arr.slice(mid));
+
+  return merge(left, right);
+}
+
+function merge(left, right) {
+  let result = [];
+  let i = 0;
+  let j = 0;
+
+  // Compare elements from both arrays and push the smaller one
+  while (i < left.length && j < right.length) {
+    if (left[i] <= right[j]) { // Uses <= to maintain sort stability
+      result.push(left[i]);
+      i++;
+    } else {
+      result.push(right[j]);
+      j++;
+    }
+  }
+
+  // Concatenate remaining elements cleanly without manual while loops
+  return result.concat(left.slice(i)).concat(right.slice(j));
+}
+
+### Reflection Answers
+
+- **How did your confidence in the solution change after verification?**
+  - Confidence increased significantly. Tracing counter increments manually and replacing fragile index-tracking loops with `.slice().concat()` eliminated potential edge-case errors.
+- **What aspects of the AI solution required the most scrutiny?**
+  - Index pointer updates (`i++` vs `j++`) and confirming whether equality comparisons preserve sort stability.
+- **Which verification technique was most valuable for your specific problem?**
+  - **Prompt 2 (Alternative Approaches):** Discovering that `.concat(left.slice(i))` removes manual remaining-element `while` loops completely eliminated the class of index bugs present in the original code.
+
+  
