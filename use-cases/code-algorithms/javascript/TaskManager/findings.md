@@ -1089,3 +1089,130 @@ function merge(left, right) {
 - **Timer Mocking:** Tests measuring `dueDate` and `updatedAt` must mock the system clock (`jest.useFakeTimers()` or `jest.spyOn(global, 'Date')`) to avoid non-deterministic test failures caused by real-time execution drift.
 - **Test Fixtures:** Maintain reusable task factories/helpers to instantiate valid `Task` objects across test suites cleanly.
 
+===
+
+## Exercise: Part 2 - Improving a Single Test
+
+### Exercise 2.1: Writing & Improving Your First Test
+
+#### 1. Initial Simple Test (Draft)
+```javascript
+test('should calculate task score based on priority', () => {
+  const task = new Task('Test Task', '', TaskPriority.HIGH);
+  const score = calculateTaskScore(task);
+  expect(score).toBe(30);
+});
+
+#### 2. Prompting the AI Agent & Refinement Journey
+
+- **Behavior vs. Implementation:** The simple test verified that `HIGH` priority yields an exact magic number (`30`). While this asserts behavior, it fails to verify the relationship between priorities (e.g., that `HIGH` scores higher than `MEDIUM`).
+- **Missing Edge Cases:** It didn't account for missing/null properties on the task object (e.g., `tags` or `dueDate`).
+- **Improving Assertions:** Improved assertions should explicitly test the base priority calculation in isolation and guard against missing optional properties.
+
+#### 3. Rewritten Robust Test
+
+describe('calculateTaskScore - Base Priority', () => {
+  test('should calculate correct base scores across all priority levels', () => {
+    // Arrange
+    const lowTask = { priority: TaskPriority.LOW, tags: [] };
+    const medTask = { priority: TaskPriority.MEDIUM, tags: [] };
+    const highTask = { priority: TaskPriority.HIGH, tags: [] };
+    const urgentTask = { priority: TaskPriority.URGENT, tags: [] };
+
+    // Act
+    const lowScore = calculateTaskScore(lowTask);
+    const medScore = calculateTaskScore(medTask);
+    const highScore = calculateTaskScore(highTask);
+    const urgentScore = calculateTaskScore(urgentTask);
+
+    // Assert (Verifying relative hierarchy and exact expected base values)
+    expect(lowScore).toBe(10);
+    expect(medScore).toBe(20);
+    expect(highScore).toBe(30);
+    expect(urgentScore).toBe(40);
+    expect(lowScore).toBeLessThan(medScore);
+    expect(medScore).toBeLessThan(highScore);
+    expect(highScore).toBeLessThan(urgentScore);
+  });
+
+  test('should fall back to 0 base score if priority is missing or invalid', () => {
+    const invalidTask = { priority: 'UNKNOWN', tags: [] };
+    expect(calculateTaskScore(invalidTask)).toBe(0);
+  });
+});
+
+### Exercise 2.2: Learning From Examples (Due Date Calculation)
+
+#### 1. Rough Pseudocode / Outline Idea
+
+// Pseudocode Idea:
+// Create tasks with different due dates (yesterday, today, tomorrow, next week)
+// Call calculateTaskScore on each
+// Check that overdue > today > tomorrow > next week
+
+#### 2. Principles of a Good Test for Date Functionality
+- **Time Freezing:** System dates are inherently dynamic. Tests depending on `new Date()` will fail unless system time is frozen using fake timers (`jest.useFakeTimers()`).
+- **Boundary Precision:** Test exact boundary transitions (e.g., 0 days remaining vs. 1 day remaining vs. 3 days remaining).
+- **Isolation:** Set `priority` to a constant value across test cases so score differences stem strictly from due date logic.
+
+#### 3. Comprehensive Final Test Implementation
+
+describe('calculateTaskScore - Due Date Calculations', () => {
+  const MOCK_NOW = new Date('2026-08-12T10:00:00Z');
+
+  beforeEach(() => {
+    // Freeze system time to ensure deterministic test runs
+    jest.useFakeTimers();
+    jest.setSystemTime(MOCK_NOW);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('should add correct point boosts based on due date proximity tiers', () => {
+    const baseTask = { priority: TaskPriority.LOW, tags: [] }; // Base score = 10
+
+    // Overdue task (-1 day): +30 points -> Total: 40
+    const overdueTask = {
+      ...baseTask,
+      dueDate: new Date('2026-08-11T10:00:00Z')
+    };
+
+    // Due Today (0 days): +20 points -> Total: 30
+    const dueTodayTask = {
+      ...baseTask,
+      dueDate: new Date('2026-08-12T18:00:00Z')
+    };
+
+    // Due in 2 Days (<= 2 days): +15 points -> Total: 25
+    const dueSoonTask = {
+      ...baseTask,
+      dueDate: new Date('2026-08-14T10:00:00Z')
+    };
+
+    // Due in 5 Days (<= 7 days): +10 points -> Total: 20
+    const dueThisWeekTask = {
+      ...baseTask,
+      dueDate: new Date('2026-08-17T10:00:00Z')
+    };
+
+    // Due in 15 Days (> 7 days): +0 points -> Total: 10
+    const dueLaterTask = {
+      ...baseTask,
+      dueDate: new Date('2026-08-27T10:00:00Z')
+    };
+
+    expect(calculateTaskScore(overdueTask)).toBe(40);
+    expect(calculateTaskScore(dueTodayTask)).toBe(30);
+    expect(calculateTaskScore(dueSoonTask)).toBe(25);
+    expect(calculateTaskScore(dueThisWeekTask)).toBe(20);
+    expect(calculateTaskScore(dueLaterTask)).toBe(10);
+  });
+
+  test('should safely calculate score when task has no due date', () => {
+    const taskWithoutDueDate = { priority: TaskPriority.LOW, tags: [] };
+    expect(calculateTaskScore(taskWithoutDueDate)).toBe(10);
+  });
+});
+
