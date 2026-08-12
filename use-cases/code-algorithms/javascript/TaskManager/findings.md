@@ -774,3 +774,74 @@ This module acts as a compact **text-to-task tokenizer and normalizer** (not a f
 4. **Incorporating this approach into my development workflow:**
    - Document CLI commands and options continuously as new features are added.
    - Maintain automated Jest test suites alongside code changes to keep documentation accurate.
+
+---
+
+## Exercise: Error Diagnosis Challenge
+
+### Submission Overview
+- **Chosen Project / Scenarios:** JavaScript Error Analysis (Index Out of Bounds & Global Variable Shadowing)
+- **Files Created / Used:** `findings.md`
+
+---
+
+### Scenario 1: Index Out of Bounds (JavaScript)
+
+#### Error Description and What It Means
+- **Error Message:** `Uncaught TypeError: Cannot read properties of undefined (reading '0')` (or `reading 'name'` / `reading 'email'`).
+- **Meaning:** JavaScript encountered a `TypeError` because the code tried to access a property on an object that evaluates to `undefined`. In JavaScript, reading an index beyond an array's length does not throw a traditional boundary error; instead, it returns `undefined`. The execution halts as soon as the code attempts to read a property from that `undefined` element.
+
+#### Root Cause Identification
+- In `userList.js`, the `renderUserList()` function uses a hardcoded loop threshold (`for (let i = 0; i < 5; i++)`), assuming the `users` array will always contain at least 5 elements.
+- The API endpoint returns only 3 users. On iteration `i = 3`, `users[3]` evaluates to `undefined`.
+- Attempting to read `users[3].name` or `users[3].email` resolves to `undefined.name`, triggering the runtime exception.
+
+#### Suggested Solution
+- Replace the hardcoded loop boundary with dynamic length checking or native array iteration methods:
+
+```javascript
+// Fix Option 1: Dynamic loop condition
+for (let i = 0; i < users.length; i++) {
+  const user = users[i];
+  // ... rest of loop
+}
+
+// Fix Option 2: Idiomatic array iteration
+users.forEach(user => {
+  const userName = user.name;
+  const userEmail = user.email;
+  // ... append elements
+});
+
+#### Learning Points
+- **Avoid Hardcoded Bounds:** Never rely on fixed numbers (e.g., `i < 5`) when iterating over arrays or collections.
+- **Use Dynamic Boundaries or Iterators:** Derive loop constraints dynamically using array length (`i < users.length`) or higher-order functions (`forEach`, `map`).
+- **Handle Variable Data Safely:** Always account for dynamic response sizes or empty payloads coming from asynchronous API calls.
+
+### Scenario 2: Global Variable Being Overwritten / Variable Shadowing (JavaScript)
+
+#### Error Description and What It Means
+- **Error Message:** `Uncaught TypeError: Cannot read properties of undefined (reading 'map')`
+- **Meaning:** The JavaScript engine attempted to invoke the `.map()` method on a variable that is either not an array or evaluates to `undefined`. This error occurs when a variable expected to contain an Array reference gets shadowed or reassigned to a different data type.
+
+#### Root Cause Identification
+- At the root level of `taskManager.js`, `let tasks = []` is declared globally to hold the list of task objects.
+- Inside the `addTask(taskName)` function, the line `let tasks = { id: Date.now(), name: taskName, completed: false }` declares a new local variable named `tasks`.
+- Re-declaring `let tasks` inside `addTask` creates variable shadowing, blocking access to the outer global array within that function scope.
+- As a result, the new task is never appended to the global array. When `displayTasks()` runs, if `tasks` is not referencing a valid array, calling `tasks.map()` throws a runtime `TypeError` because `.map()` is exclusive to `Array.prototype`.
+
+#### Suggested Solution
+- Remove local variable shadowing inside `addTask()`, rename the single task variable using a singular noun, and push the object into the outer `tasks` array:
+
+```javascript
+function addTask(taskName) {
+  const newTask = { id: Date.now(), name: taskName, completed: false };
+  tasks.push(newTask);
+  displayTasks();
+}
+
+#### Learning Points
+- **Use Naming Conventions:** Reserve plural identifiers for collections/arrays (tasks) and singular identifiers for single entities (task or newTask).
+- **Prevent Variable Shadowing:** Avoid re-declaring variables with let or const inside inner scopes using names that match outer or global variables.
+- **Encapsulate State:** Minimize reliance on loose global state by organizing code into modules, classes, or controlled state objects.
+
