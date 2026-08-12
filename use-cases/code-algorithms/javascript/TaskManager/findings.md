@@ -1341,3 +1341,121 @@ if (task.updatedAt) {
 #### 3. Step 3: Verification
 Re-run the test suite using Jest to ensure the bug reproduction test turns Green and no regression bugs are introduced into base priority, due date, or tag calculations.
 
+## Exercise: Part 4 - Integration Testing & Workflow Verification
+
+### Exercise 4.1: Testing the Full Workflow
+
+#### 1. Test Design Scenarios
+- **Scenario 1:** Sorting a heterogeneous mix of tasks (overdue critical items, completed tasks, tasks assigned to the current user, low-priority routine tasks).
+- **Scenario 2:** End-to-end integration verifying that `getTopPriorityTasks` properly delegates sorting to `sortTasksByImportance`, which in turn calls `calculateTaskScore` for every task.
+- **Scenario 3:** Verifying array immutability and precise slice boundaries when limiting results to $N$ items.
+
+#### 2. Comprehensive Integration Test
+```javascript
+describe('Task Priority System - End-to-End Integration', () => {
+  const MOCK_NOW = new Date('2026-08-12T10:00:00Z');
+  const CURRENT_USER_ID = 'user-789';
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(MOCK_NOW);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('should correctly score, sort, and retrieve top priority tasks for a full task set', () => {
+    // Arrange: Create a realistic mixture of tasks
+    const tasks = [
+      {
+        id: 'task-1',
+        title: 'Routine Documentation',
+        priority: TaskPriority.LOW, // Score: 10
+        tags: []
+      },
+      {
+        id: 'task-2',
+        title: 'Critical Production Bug',
+        priority: TaskPriority.URGENT, // Score: 40
+        dueDate: new Date('2026-08-11T10:00:00Z'), // Overdue: +30
+        tags: ['blocker'], // Tag boost: +8 -> Total: 78
+        assigneeId: CURRENT_USER_ID // User boost: +12 -> Total: 90
+      },
+      {
+        id: 'task-3',
+        title: 'Completed Urgent Refactor',
+        priority: TaskPriority.URGENT, // Score: 40
+        status: TaskStatus.DONE, // Deduction: -50 -> Total: -10
+        tags: ['critical']
+      },
+      {
+        id: 'task-4',
+        title: 'Feature Review',
+        priority: TaskPriority.HIGH, // Score: 30
+        dueDate: new Date('2026-08-12T18:00:00Z'), // Due Today: +20
+        tags: [],
+        assigneeId: CURRENT_USER_ID // User boost: +12 -> Total: 62
+      },
+      {
+        id: 'task-5',
+        title: 'Backend API Enhancement',
+        priority: TaskPriority.MEDIUM, // Score: 20
+        dueDate: new Date('2026-08-14T10:00:00Z'), // Due in 2 days: +15 -> Total: 35
+        tags: []
+      }
+    ];
+
+    // Act 1: Sort all tasks by importance
+    const sortedTasks = sortTasksByImportance(tasks, CURRENT_USER_ID);
+
+    // Assert 1: Verify sorting order (Task 2 -> Task 4 -> Task 5 -> Task 1 -> Task 3)
+    expect(sortedTasks.map(t => t.id)).toEqual([
+      'task-2', // Score: 90
+      'task-4', // Score: 62
+      'task-5', // Score: 35
+      'task-1', // Score: 10
+      'task-3'  // Score: -10
+    ]);
+
+    // Assert 2: Verify original array was not mutated
+    expect(tasks[0].id).toBe('task-1');
+
+    // Act 2: Retrieve Top 3 Priority Tasks
+    const top3 = getTopPriorityTasks(tasks, 3, CURRENT_USER_ID);
+
+    // Assert 3: Verify top N slicing
+    expect(top3.length).toBe(3);
+    expect(top3.map(t => t.id)).toEqual(['task-2', 'task-4', 'task-5']);
+  });
+});
+
+### Final Submission Document Summary
+
+# Comprehensive Task Priority Testing Report (`findings.md`)
+
+## 1. Part 1: Test Plan & Behavior Analysis
+- **Module:** Task Priority Management (`task_priority.js`)
+- **Behavior Analysis:** Detailed breakdown of scoring weights, date tiers, status deductions, and immutability rules.
+- **Structured Test Plan Table:** Prioritized test cases (P0–P2) covering core execution paths, defensive null-checks, edge cases, and date mocking setups.
+
+## 2. Part 2: Unit Test Improvements
+- **Base Priority Tests:** Transition from brittle single-value checks to relational hierarchy assertions.
+- **Due Date Proximity Tests:** Robust test suite leveraging `jest.useFakeTimers()` to test boundary conditions across overdue, today, and future date tiers deterministically.
+
+## 3. Part 3: TDD Practice
+- **Current User Score Boost (+12):** Failing test -> minimal implementation -> green state verification.
+- **Recency Bug Fix:** Failure reproduction test for floating-point / millisecond date calculation bugs -> fixed implementation using `24 * 60 * 60 * 1000` ms logic.
+
+## 4. Part 4: Integration Testing
+- Full end-to-end integration test verifying `calculateTaskScore`, `sortTasksByImportance`, and `getTopPriorityTasks` working together across complex task datasets.
+
+## 5. Reflection on Testing & AI-Assisted Workflows
+
+Working through this multi-part exercise highlighted several core principles about testing and using AI as a guided thought partner:
+
+1. **Testing Behavior Over Implementation Details:** Early test drafts often asserted rigid "magic numbers" derived from implementation details. Structuring tests to assert behavioral relationships (e.g., verifying relative priorities or tier order) produces test suites that are resilient to minor refactoring while remaining accurate.
+2. **Deterministic Environment Control:** Functions relying on dates and times (`new Date()`) are inherently non-deterministic. Using fake timers (`jest.useFakeTimers()`) is essential to prevent subtle, time-dependent test failures across different execution environments or timezones.
+3. **The Value of Socratic AI Prompting:** Prompting the AI to ask questions, challenge assertions, and guide minimal implementations rather than blindly generating code forced a deeper understanding of edge cases (e.g., handling missing `tags` or array immutability) and reinforced proper Red-Green-Refactor TDD cycles.
+4. **Confidence Through Layered Testing:** Unit tests isolate logic at the function boundary, but integration tests validate system contracts (e.g., ensuring sorting delegates cleanly to scoring without side effects). Both layers are necessary to maintain a reliable software codebase.
+
