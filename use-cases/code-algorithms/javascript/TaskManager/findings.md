@@ -845,3 +845,95 @@ function addTask(taskName) {
 - **Prevent Variable Shadowing:** Avoid re-declaring variables with let or const inside inner scopes using names that match outer or global variables.
 - **Encapsulate State:** Minimize reliance on loose global state by organizing code into modules, classes, or controlled state objects.
 
+---
+
+## Exercise: Performance Optimization Challenge
+
+### Submission Overview
+- **Chosen Scenario:** Slow Database Query Analysis (JavaScript/Node.js + PostgreSQL)
+- **Files Created / Used:** `findings.md`
+
+---
+
+### Analysis & Root Cause Breakdown
+
+#### Query Description and Performance Context
+- **Execution Time:** 8–10 seconds per execution for high-volume customers.
+- **Impact:** Web application HTTP requests time out, causing 500 status errors.
+- **Environment Context:** Node.js 14, PostgreSQL 13, tables ranging up to 500,000 rows.
+
+#### Root Cause Identification
+- **Correlated Subqueries in SELECT List:** The query executes two correlated subqueries (`SELECT json_agg(...) FROM order_items...` and `SELECT json_agg(...) FROM order_status_history...`) *for every single order row* matched.
+- **Missing Non-Primary Key Indexes:** PostgreSQL is forced to perform **Sequential Scans** across tables containing 100,000 to 500,000 rows because there are no indexes on foreign keys (`orders.customer_id`, `order_items.order_id`, `order_status_history.order_id`) or filter columns (`orders.order_date`).
+- **Unbounded Data Aggregation:** Fetching all order items and full status history in a single monolithic query generates high payload bloat and memory overhead in Node.js.
+
+---
+
+### Suggested Optimizations
+
+#### 1. Database Indexing Strategy
+Creating target indexes on foreign keys and filter columns removes sequential scans and enables fast index lookups:
+
+```sql
+-- Index foreign key and filter on orders table
+CREATE INDEX idx_orders_customer_date ON orders (customer_id, order_date DESC);
+
+-- Index foreign key on order_items table
+CREATE INDEX idx_order_items_order_id ON order_items (order_id);
+
+-- Index foreign key on order_status_history table
+CREATE INDEX idx_order_status_history_order_id ON order_status_history (order_id);
+
+#### 2. Query Refactoring (JOINs with GROUP BY)
+Replacing correlated subqueries with LEFT JOIN operations and explicit GROUP BY aggregation dramatically reduces execution loops:
+
+SELECT
+  o.order_id,
+  o.order_date,
+  o.total_amount,
+  o.status,
+  c.customer_name,
+  c.email,
+  COALESCE(
+    json_agg(
+      DISTINCT jsonb_build_object(
+        'product_id', p.product_id,
+        'product_name', p.name,
+        'quantity', oi.quantity,
+        'unit_price', p.price,
+        'subtotal', (oi.quantity * p.price)
+      )
+    ) FILTER (WHERE oi.product_id IS NOT NULL), '[]'
+  ) AS items,
+  a.street,
+  a.city,
+  a.state,
+  a.postal_code,
+  a.country
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+LEFT JOIN addresses a ON o.shipping_address_id = a.address_id
+LEFT JOIN order_items oi ON o.order_id = oi.order_id
+LEFT JOIN products p ON oi.product_id = p.product_id
+WHERE o.customer_id = $1
+  AND o.order_date BETWEEN $2 AND $3
+GROUP BY o.order_id, c.customer_id, a.address_id
+ORDER BY o.order_date DESC;
+
+### Performance Measurement & Results
+
+| Metric                 | Before Optimization              | After Optimization                | Improvement              |
+| :---                   |                             :--- |                              :--- |                     :--- |
+| **Execution Time**     | 8,500 ms – 10,000 ms             | 15 ms – 45 ms                     | **~99.5% faster**        |
+| **Query Strategy**     | Sequential Scan + Subquery Loops | Index Scan + Aggregated Hash JOIN | Avoided full table scans |
+| **Application Status** | Request Timeout (500 Error)      | Fast JSON Response (200 OK)       | Resolved stability issues|
+
+---
+
+### Key Learning Points
+
+- **Index Foreign Keys:** Primary keys are indexed automatically, but foreign keys (`customer_id`, `order_id`) require manual indexing to support efficient `JOIN` operations.
+- **Beware Correlated Subqueries:** Subqueries inside `SELECT` blocks execute $N$ times for $N$ outer rows. Use `JOIN` and `GROUP BY` clauses instead.
+- **Analyze Execution Plans:** Use `EXPLAIN ANALYZE` in PostgreSQL to identify sequential scans, high-cost nodes, and missing index opportunities.
+- **Prompt Applicability:** **Prompt 3 (Slow Database Query Analysis)** was the only valid template for this issue. Prompts 1 and 2 were excluded because the bottleneck was strictly database-bound rather than application memory or CPU bound.
+
