@@ -1029,4 +1029,63 @@ function merge(left, right) {
 - **Which verification technique was most valuable for your specific problem?**
   - **Prompt 2 (Alternative Approaches):** Discovering that `.concat(left.slice(i))` removes manual remaining-element `while` loops completely eliminated the class of index bugs present in the original code.
 
-  
+===
+
+## Exercise: Using AI to Help with Testing
+
+### Submission Overview
+- **Chosen Module:** Task Priority Management (`task_priority.js`)
+- **Functions Analyzed:** `calculateTaskScore`, `sortTasksByImportance`, `getTopPriorityTasks`
+- **Files Created / Used:** `findings.md`
+
+---
+
+### Exercise 1.1: Behavior Analysis
+
+#### 1. Core Behaviors Identified
+- **Priority Weighting (`calculateTaskScore`):** Multiplies base priority weights (`LOW`: 1, `MEDIUM`: 2, `HIGH`: 3, `URGENT`: 4) by 10.
+- **Due Date Scoring (`calculateTaskScore`):**
+  - Overdue (`daysUntilDue < 0`): +30 points.
+  - Due Today (`daysUntilDue === 0`): +20 points.
+  - Due in 1–2 days (`daysUntilDue <= 2`): +15 points.
+  - Due in 3–7 days (`daysUntilDue <= 7`): +10 points.
+- **Status Adjustments (`calculateTaskScore`):**
+  - Completed (`TaskStatus.DONE`): Deducts 50 points.
+  - In Review (`TaskStatus.REVIEW`): Deducts 15 points.
+- **Tag Boosts (`calculateTaskScore`):** Adds +8 points if the `tags` array contains `"blocker"`, `"critical"`, or `"urgent"`.
+- **Recency Boost (`calculateTaskScore`):** Adds +5 points if the task was updated less than 24 hours ago (`daysSinceUpdate < 1`).
+- **Immutability & Ordering (`sortTasksByImportance`):** Creates a shallow copy of the input array (`[...tasks]`) and sorts items descending by calculated task score (`score(b) - score(a)`).
+- **Top N Filtering (`getTopPriorityTasks`):** Delegates sorting to `sortTasksByImportance` and slices the top $N$ items (defaulting to 5).
+
+#### 2. Critical Edge Cases Identified
+- **Undefined / Missing Tags:** If `task.tags` is `undefined` or `null`, calling `task.tags.some(...)` will throw an unhandled `TypeError`.
+- **Immutability Verification:** Tests must verify that `sortTasksByImportance` does not mutate the original input array passed into it.
+- **Default & Out-of-Bounds Slicing (`getTopPriorityTasks`):**
+  - Requesting more items than exist in the array (e.g., `limit = 10` on an array of 3 tasks) should safely return all 3 tasks without error.
+  - Passing `limit = 0` or negative values.
+  - Ensuring the default parameter `limit = 5` functions when no limit argument is passed.
+- **Equal Scores / Stability:** When two tasks yield the exact same calculated score, the sorting mechanism should handle them predictably without dropping or re-ordering items unexpectedly.
+
+---
+
+### Exercise 1.2: Structured Test Plan
+
+#### 1. Test Suite Architecture & Priority Checklist
+
+| Priority | Test Name / Behavior | Test Type | Expected Outcome |
+| :--- | :--- | :--- | :--- |
+| **P0 (Critical)** | Base Priority Calculation | Unit | Scores increase monotonically from `LOW` (10) to `URGENT` (40). |
+| **P0 (Critical)** | Missing/Undefined `tags` Property | Unit (Defensive) | Prevents runtime `TypeError` when `task.tags` is undefined. |
+| **P0 (Critical)** | Task Sorting Order | Unit | `sortTasksByImportance` orders tasks descending by score. |
+| **P0 (Critical)** | Input Array Immutability | Unit | Original array reference and element order remain unchanged after sorting. |
+| **P1 (High)** | Due Date Tier Calculations | Unit | Correctly adds 30 (Overdue), 20 (Today), 15 (1–2 days), or 10 (3–7 days) points. |
+| **P1 (High)** | Status Deductions | Unit | `DONE` deducts 50; `REVIEW` deducts 15; active statuses deduct 0. |
+| **P1 (High)** | Top N Tasks Slicing | Unit | `getTopPriorityTasks(tasks, 3)` returns exactly top 3 sorted tasks. |
+| **P1 (High)** | Default Limit Parameter | Unit | `getTopPriorityTasks(tasks)` defaults to returning top 5 tasks. |
+| **P2 (Medium)** | Limit Exceeds Array Length | Unit | `getTopPriorityTasks` with `limit = 10` on 3 tasks returns all 3 tasks cleanly. |
+| **P2 (Medium)** | Date & Timezone Mocking | Unit / Integration | Uses `jest.useFakeTimers()` to ensure deterministic date calculations. |
+
+#### 2. Test Dependencies & Execution Setup
+- **Timer Mocking:** Tests measuring `dueDate` and `updatedAt` must mock the system clock (`jest.useFakeTimers()` or `jest.spyOn(global, 'Date')`) to avoid non-deterministic test failures caused by real-time execution drift.
+- **Test Fixtures:** Maintain reusable task factories/helpers to instantiate valid `Task` objects across test suites cleanly.
+
