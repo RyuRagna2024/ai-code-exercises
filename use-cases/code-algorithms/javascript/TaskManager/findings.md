@@ -2685,3 +2685,149 @@ runShippingTests();
 > This keeps our code compliant with the **Open/Closed Principle**: when marketing asks us to add a new shipping tier, we just drop in a new strategy class instead of editing a 60-line conditional tree. All unit tests pass with zero behavior changes!"
 
 ===
+
+# Findings: Deepening Language Understanding
+
+## Activity 1: Idiomatic Code Transformation
+
+### Code Transformation Side-by-Side (JavaScript / Node.js)
+
+#### Original Strategy Implementation (`shipping.js`)
+```javascript
+// Class-heavy implementation
+class ShippingStrategy {
+  calculate(packageDetails, destinationCountry) {
+    throw new Error("Method 'calculate()' must be implemented.");
+  }
+}
+
+class StandardShippingStrategy extends ShippingStrategy {
+  calculate(packageDetails, destinationCountry) {
+    const { weight, length, width, height } = packageDetails;
+    const rates = { USA: 2.5, Canada: 3.5, Mexico: 4.0 };
+    const rate = rates[destinationCountry] || 4.5;
+    let cost = weight * rate;
+    if (weight < 2 && (length * width * height) > 1000) cost += 5.0;
+    return cost.toFixed(2);
+  }
+}
+
+#### Idiomatic Transformation (Functional JavaScript Strategy)
+
+// Idiomatic JS using Object Strategy Map & First-Class Functions
+const SHIPPING_STRATEGIES = {
+  standard: ({ weight, length, width, height }, country) => {
+    const rates = { USA: 2.5, Canada: 3.5, Mexico: 4.0 };
+    const baseRate = rates[country] ?? 4.5; // Nullish coalescing operator
+    const volume = length * width * height;
+    const surcharge = (weight < 2 && volume > 1000) ? 5.0 : 0.0;
+    return (weight * baseRate + surcharge).toFixed(2);
+  },
+  
+  express: ({ weight, length, width, height }, country) => {
+    const rates = { USA: 4.5, Canada: 5.5, Mexico: 6.0 };
+    const baseRate = rates[country] ?? 7.5;
+    const volume = length * width * height;
+    const surcharge = volume > 5000 ? 15.0 : 0.0;
+    return (weight * baseRate + surcharge).toFixed(2);
+  },
+
+  overnight: ({ weight }, country) => {
+    const rates = { USA: 9.5, Canada: 12.5 };
+    if (!rates[country]) return "Overnight shipping not available for this destination";
+    return (weight * rates[country]).toFixed(2);
+  }
+};
+
+const calculateShippingCost = (packageDetails, destinationCountry, method) => {
+  const strategy = SHIPPING_STRATEGIES[method];
+  if (!strategy) throw new Error(`Unsupported shipping method: ${method}`);
+  return strategy(packageDetails, destinationCountry);
+};
+
+### 3 Key Learnings
+1. **Functions as First-Class Citizens:** JavaScript doesn't require OOP boilerplate (like abstract classes and inheritance) to implement the Strategy pattern. Object maps holding functions are more lightweight and idiomatic.
+2. **Modern Operator Syntax:** Leveraging `??` (nullish coalescing) and destructuring directly inside function signatures cleans up fallback logic without verbose OR chaining.
+3. **Immutability Over Mutation:** Expressing calculations as direct return formulas rather than initializing a let variable (`let cost = 0`) and mutating it step-by-step reduces state bugs.
+
+---
+
+## Activity 2: Code Quality Detective
+
+### Reviewing Inventory Loop Code
+
+#### Code Quality Issues Identified & Checklist
+* [x] **Magic Property Names:** Properties like `.p` and `.q` obscure domain context.
+* [x] **Uncontrolled Loop Nesting:** O(N × M) nested loop strategy scales poorly on large arrays.
+* [x] **In-Place Mutation Side Effects:** Mutating inventory objects during iteration makes state tracing difficult.
+* [x] **Lack of Modern ES6 Array Methods:** Using indexed `for` loops instead of native `Map` or `find()`.
+
+#### Code Quality Metrics Rating
+* **Readability:** 2 / 5 (Cryptic identifiers, high cognitive load)
+* **Performance:** 3 / 5 (O(N × M) brute-force nested lookup)
+* **Maintainability:** 2 / 5 (Fragile state mutation across iterations)
+
+### Code Improvement Highlight (O(1) Map Lookups)
+
+// Replacing nested O(N*M) loops with a Map lookup O(N)
+function processInventoryOptimized(requestedItems, inventoryList, targetQuantity) {
+  // Convert array to Map for fast O(1) lookups
+  const inventoryMap = new Map(inventoryList.map(item => [item.id, item]));
+  
+  let totalCost = 0;
+  const fulfilledItems = [];
+
+  for (const item of requestedItems) {
+    const stockItem = inventoryMap.get(item.id);
+    if (stockItem && stockItem.q >= targetQuantity) {
+      fulfilledItems.push(item);
+      totalCost += item.p * targetQuantity;
+      stockItem.q -= targetQuantity; // Deduct stock
+    }
+  }
+
+  return { s: fulfilledItems, t: totalCost };
+}
+
+### 3 Key Learnings
+1. **Data Structure Selection Matters:** Swapping nested loops for a JavaScript `Map` changes complexity from O(N × M) to O(N), showing how algorithmic structure impacts code quality.
+2. **Side-Effect Management:** In-place mutations in core logic often lead to subtle bugs in production if the original array is reused elsewhere without developer awareness.
+3. **Defensive Programming:** Always guard against missing entries or undefined lookups (`inventoryMap.get()`) before accessing object properties.
+
+---
+
+## Activity 3: Understanding Language Features (JavaScript Generators)
+
+### Feature Chosen: JavaScript Generators (`function*` & `yield`)
+
+/**
+ * Practical Use Case: Paginated Inventory/Order Fetcher
+ * Yields items batch-by-batch without loading the entire dataset into memory at once.
+ */
+function* inventoryBatchFetcher(items, batchSize = 2) {
+  for (let i = 0; i < items.length; i += batchSize) {
+    yield items.slice(i, i + batchSize);
+  }
+}
+
+// Example Execution
+const dataset = ['item1', 'item2', 'item3', 'item4', 'item5'];
+const batchGenerator = inventoryBatchFetcher(dataset, 2);
+
+console.log(batchGenerator.next().value); // ['item1', 'item2']
+console.log(batchGenerator.next().value); // ['item3', 'item4']
+console.log(batchGenerator.next().value); // ['item5']
+
+### 3 Key Learnings
+1. **Lazy Evaluation:** Generators allow execution to pause and resume on demand using `yield`, saving memory when streaming or processing large datasets.
+2. **State Preservation:** The inner state of a generator is preserved across calls without relying on global or outer closure variables.
+3. **Custom Iterables:** Custom objects can be made iterable with `Symbol.iterator`, enabling clean integrations with standard `for...of` loops.
+
+---
+
+## Common Themes Across All Learnings
+
+1. **Simplicity Over Ceremony:** The best idiomatic code favors direct language capabilities (object lookup maps, generators, ES6 methods) over overly verbose architectural boilerplate.
+2. **Explicit Intent:** Modern readable code emphasizes clear naming and direct return values over mutation, preventing dynamic type or runtime bugs.
+3. **Performance Through Elegance:** Clean language features (like `Map` lookups and lazy evaluation with Generators) inherently improve performance while simultaneously reducing lines of code.
+
