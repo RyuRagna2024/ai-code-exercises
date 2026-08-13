@@ -399,3 +399,21 @@ To tackle Part 4 systematically without overwhelming your workspace, follow this
 4. **Query Parameters for Search & Pagination:**
    * **Documentation Reference:** *Query Parameters & String Validations*
    * **Implementation Choice:** Endpoint parameters for list searching (`search`, `skip`, `limit`) leverage standard Python type hinting alongside FastAPI's `Query()` descriptor to provide automatic query string parsing and default fallbacks.
+
+===
+
+## Exercise: Understanding FastAPI Code Patterns
+
+### Key Pattern Takeaways
+
+1. **Repository Pattern & Generics (`Generic[T]`):**
+   * Separates data storage logic from business rules.
+   * `Generic[T]` allows defining common database methods once (`get_by_id`, `list`), reducing boilerplate code while allowing entity-specific specialization via subclasses.
+
+2. **Hierarchical Dependency Injection:**
+   * FastAPI resolves dependencies automatically in a directed acyclic graph.
+   * Route handlers remain lightweight because DB session instantiation, JWT parsing, and user retrieval are handled before reaching the route body.
+
+3. **Decorator-Based Authorization & Middleware:**
+   * Custom decorators (`@requires_role`) encapsulate permissions checks cleanly.
+   * Middleware (`TimingMiddleware`) wraps the entire ASGI call stack to perform global request/response processing like timing and telemetry.
