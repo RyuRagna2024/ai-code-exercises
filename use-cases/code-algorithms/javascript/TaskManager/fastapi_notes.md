@@ -377,3 +377,25 @@ To tackle Part 4 systematically without overwhelming your workspace, follow this
   │
   └── 4. Search & Filter Extensions (`Query` parameters)
        └── Add Search Endpoints with Pagination
+
+---
+
+## Part 4 Conclusion: Blog API Implementation & Reflection
+
+### How Documentation Informed Implementation Choices
+
+1. **Schema & Model Validation (`pydantic` & `email-validator`):**
+   * **Documentation Reference:** *Pydantic Data Types & Field Validation*
+   * **Implementation Choice:** Separate `UserCreate` and `UserResponse` models were constructed to ensure strict boundaries. By decoupling incoming payload validation from outgoing responses, sensitive values like raw passwords are systematically filtered out before returning responses to clients.
+
+2. **OAuth2 Password Bearer Flow:**
+   * **Documentation Reference:** *Security - First Steps (OAuth2 with Password and Bearer)*
+   * **Implementation Choice:** Utilizing FastAPI's built-in `OAuth2PasswordBearer(tokenUrl="login")` allowed seamless integration with standard OpenAPI Swagger UI headers. Route handlers enforce authentication dependencies cleanly via `Depends(get_current_user)`.
+
+3. **Modular Route Organization (`APIRouter`):**
+   * **Documentation Reference:** *Bigger Applications - Multiple Files*
+   * **Implementation Choice:** Routers were grouped logically into dedicated endpoints (`auth.py` and `posts.py`) and mounted inside `app/main.py`. This keeps route parameters, dependency injections, and path operations organized and scalable.
+
+4. **Query Parameters for Search & Pagination:**
+   * **Documentation Reference:** *Query Parameters & String Validations*
+   * **Implementation Choice:** Endpoint parameters for list searching (`search`, `skip`, `limit`) leverage standard Python type hinting alongside FastAPI's `Query()` descriptor to provide automatic query string parsing and default fallbacks.

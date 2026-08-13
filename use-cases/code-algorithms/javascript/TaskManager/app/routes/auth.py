@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
@@ -23,7 +24,7 @@ async def register(user: UserCreate):
         "email": user.email,
         "hashed_password": get_password_hash(user.password),
         "is_active": True,
-        "created_at": user_dict.get("created_at")
+        "created_at": datetime.utcnow()  # FIXED
     }
     fake_users_db[user.username] = user_dict
     return user_dict
