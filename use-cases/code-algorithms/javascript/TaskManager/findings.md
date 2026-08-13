@@ -1459,3 +1459,545 @@ Working through this multi-part exercise highlighted several core principles abo
 3. **The Value of Socratic AI Prompting:** Prompting the AI to ask questions, challenge assertions, and guide minimal implementations rather than blindly generating code forced a deeper understanding of edge cases (e.g., handling missing `tags` or array immutability) and reinforced proper Red-Green-Refactor TDD cycles.
 4. **Confidence Through Layered Testing:** Unit tests isolate logic at the function boundary, but integration tests validate system contracts (e.g., ensuring sorting delegates cleanly to scoring without side effects). Both layers are necessary to maintain a reliable software codebase.
 
+===
+
+# Exercise 1: Code Readability Improvement (Java)
+
+## 1. Prompt Used
+
+```text
+I want to make this code more readable and maintainable. Please help me by:
+1. Identifying parts that are difficult to understand
+2. Suggesting better variable and function names
+3. Recommending ways to break down complex sections
+4. Pointing out any inconsistent style or formatting issues
+
+class UserMgr {
+    private List<U> u_list;
+    private DBConn db;
+
+    public UserMgr(DBConn d) {
+        db = d;
+        u_list = new ArrayList<>();
+    }
+
+    public boolean a(String un, String pw, String em) {
+        if (un.length() < 3 || pw.length() < 8 || !em.contains("@")) {
+            return false;
+        }
+
+        for (U user : u_list) {
+            if (user.getUn().equals(un)) {
+                return false;
+            }
+        }
+
+        U nu = new U(un, pw, em);
+        u_list.add(nu);
+        boolean res = db.execute("INSERT INTO users VALUES ('" + un + "', '" + pw + "', '" + em + "')");
+        return res;
+    }
+
+    public U f(String un) {
+        for (U user : u_list) {
+            if (user.getUn().equals(un)) {
+                return user;
+            }
+        }
+        return null;
+    }
+}
+
+class U {
+    private String un;
+    private String pw;
+    private String em;
+
+    public U(String un, String pw, String em) {
+        this.un = un;
+        this.pw = pw;
+        this.em = em;
+    }
+
+    public String getUn() { return un; }
+    public String getPw() { return pw; }
+    public String getEm() { return em; }
+}
+
+Language/Framework: Java 17 / Standard Library
+Team coding standards: Standard Java Naming Conventions (PascalCase for classes, camelCase for variables/methods, clear expressive names without arbitrary abbreviations).
+
+## 2. Analysis of Readability & Maintainability Issues
+
+### Cryptic & Abbreviated Naming
+* **Classes (`UserMgr`, `U`):** Highly non-descriptive. `U` should be `User`, and `UserMgr` should be `UserManager`.
+* **Methods (`a`, `f`, `getUn`, `getPw`, `getEm`):** Single-letter method names (`a` and `f`) give no indication of behavior. They should be `addUser` (or `registerUser`) and `findUserByUsername`.
+* **Variables (`u_list`, `un`, `pw`, `em`, `nu`, `d`, `res`):** Excessive abbreviation harms cognitive flow. Variables should use full words (`userList`, `username`, `password`, `email`, `newUser`).
+
+### Style & Convention Violations
+* **Snake_case in Java (`u_list`):** Java convention dictates `camelCase` for instance variables (`userList` or `users`), not `snake_case`.
+* **Compact/Single-Line Method Declarations:** Getters in class `U` are compressed onto single lines, violating standard formatting guidelines.
+
+### Code Structure & Logic Clarity
+* **Inline Validation:** Input validation (checking length and `@` presence) is stuffed into the main execution block of the `a` method rather than extracted into a separate helper method or validation class.
+* **String Concatenation in SQL:** Direct SQL query concatenation (`"INSERT INTO users VALUES ('" + un + ...`) creates a critical **SQL Injection vulnerability** and makes the string hard to read.
+* **Manual Iteration vs. Java Streams/Optional:** The linear `for` loop searching for existing users can be simplified using Java Streams or Java `Optional<User>` return types to make null safety explicit.
+
+## 3. Refactored Java Code
+
+package com.example.users;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+public class UserManager {
+    private final List<User> users;
+    private final DatabaseConnection databaseConnection;
+
+    public UserManager(DatabaseConnection databaseConnection) {
+        this.databaseConnection = databaseConnection;
+        this.users = new ArrayList<>();
+    }
+
+    /**
+     * Validates and registers a new user if the username is not already taken.
+     */
+    public boolean registerUser(String username, String password, String email) {
+        if (!isInputValid(username, password, email)) {
+            return false;
+        }
+
+        if (findUserByUsername(username).isPresent()) {
+            return false; // User already exists
+        }
+
+        User newUser = new User(username, password, email);
+        users.add(newUser);
+
+        // Standardized parameterized query format to prevent SQL injection
+        String sql = "INSERT INTO users (username, password, email) VALUES (?, ?, ?)";
+        return databaseConnection.executeUpdate(sql, username, password, email);
+    }
+
+    /**
+     * Finds a user by their exact username.
+     */
+    public Optional<User> findUserByUsername(String username) {
+        return users.stream()
+                .filter(user -> user.getUsername().equals(username))
+                .findFirst();
+    }
+
+    private boolean isInputValid(String username, String password, String email) {
+        return username != null && username.length() >= 3
+                && password != null && password.length() >= 8
+                && email != null && email.contains("@");
+    }
+}
+
+class User {
+    private final String username;
+    private final String password;
+    private final String email;
+
+    public User(String username, String password, String email) {
+        this.username = username;
+        this.password = password;
+        this.email = email;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+}
+
+## 4. Readability Issues Identified & Reflection
+
+* **Identified Issues I Might Have Missed:**
+  * **Null Return Risk vs. `Optional<T>`:** While searching for a missing user, returning `null` in `f(String un)` forces caller code to handle potential `NullPointerException`s without explicit compile-time warnings. Refactoring to return `Optional<User>` improves clarity and type safety.
+  * **Critical Security Risk Masked as Readability Issue:** Building SQL strings via raw string concatenation isn't just ugly—it's a high-severity security bug (SQL Injection). AI highlighted that improving parameterization simultaneously fixes security and readability.
+  * **Mixed Naming Paradigms:** The original code mixed standard camelCase (`UserMgr`), snake_case (`u_list`), and single-letter variables (`d`, `u`, `a`, `f`), creating cognitive overload when reading. Standardizing entirely on Java conventions significantly improves scanning speed.
+
+---
+
+# Exercise 2: Function Refactoring (Python)
+
+## 1. Prompt Used
+
+```text
+I have a function that I think is doing too much. Please help me refactor it by:
+1. Identifying the different responsibilities this function has
+2. Suggesting how to break it into smaller, focused functions
+3. Improving the organization and flow of the code
+4. Pointing out any other issues you notice
+
+def process_orders(orders, inventory, customer_data):
+    results = []
+    total_revenue = 0
+    error_orders = []
+
+    for order in orders:
+        # Check if item is in inventory
+        item_id = order['item_id']
+        quantity = order['quantity']
+        customer_id = order['customer_id']
+
+        if item_id not in inventory:
+            error_orders.append({'order_id': order['order_id'], 'error': 'Item not in inventory'})
+            continue
+
+        # Check if enough quantity available
+        if inventory[item_id]['quantity'] < quantity:
+            error_orders.append({'order_id': order['order_id'], 'error': 'Insufficient quantity'})
+            continue
+
+        # Check if customer exists
+        if customer_id not in customer_data:
+            error_orders.append({'order_id': order['order_id'], 'error': 'Customer not found'})
+            continue
+
+        # Calculate price
+        price = inventory[item_id]['price'] * quantity
+
+        # Apply discount if customer is premium
+        if customer_data[customer_id]['premium']:
+            price = price * 0.9
+
+        # Update inventory
+        inventory[item_id]['quantity'] -= quantity
+
+        # Calculate shipping based on customer location
+        shipping = 0
+        if customer_data[customer_id]['location'] == 'domestic':
+            if price < 50:
+                shipping = 5.99
+        else:
+            shipping = 15.99
+
+        # Add tax
+        tax = price * 0.08
+
+        # Calculate final price
+        final_price = price + shipping + tax
+
+        # Update total revenue
+        total_revenue += final_price
+
+        # Create result
+        result = {
+            'order_id': order['order_id'],
+            'item_id': item_id,
+            'quantity': quantity,
+            'customer_id': customer_id,
+            'price': price,
+            'shipping': shipping,
+            'tax': tax,
+            'final_price': final_price
+        }
+
+        results.append(result)
+
+    return {
+        'processed_orders': results,
+        'error_orders': error_orders,
+        'total_revenue': total_revenue
+    }
+
+What this function should do: Process a list of orders, validate items and customers against current inventory and customer records, mutate/update inventory stock levels, calculate total pricing (discounts, shipping, tax), and track aggregate revenue alongside successful and failed orders.
+
+## 2. Analysis of Responsibilities & Refactoring Strategy
+
+### Identifications of Mixed Responsibilities
+* **Validation / Guard Clauses:** Checking stock availability and customer existence.
+* **Pricing & Calculations:** Discount rates, shipping cost lookup based on region, and tax calculations.
+* **State Mutation:** Modifying the `inventory` dictionary directly during iteration.
+* **Collection Orchestration:** Iterating through orders, maintaining total revenue, and sorting results into successful vs. error lists.
+
+### Suggested Breakdown of Focused Functions
+1. `validate_order(order, inventory, customer_data) -> Optional[str]`: Handles guard checks and returns an error string if invalid, or `None` if valid.
+2. `calculate_item_price(base_price, quantity, is_premium) -> float`: Computes base cost minus premium discounts.
+3. `calculate_shipping(price, location) -> float`: Isolates regional shipping rules and threshold logic.
+4. `calculate_order_totals(order, inventory, customer) -> dict`: Aggregates price, shipping, and tax calculations for a single valid order.
+5. `process_single_order(...) -> Tuple[dict, float]`: Updates inventory stock and builds the completed result object.
+
+### Other Identified Issues
+* **Side Effects (In-place Mutation):** If processing fails midway, inventory updates from prior orders persist while partial failures accumulate, leading to inconsistent state.
+* **Hardcoded Magic Values:** Values like `0.9` (discount), `5.99`/`15.99` (shipping), and `0.08` (tax rate) should be configured constants.
+* **Floating-Point Precision:** Using raw `float` operations for currency calculations risks rounding errors (should ideally use `Decimal` or round consistently).
+
+## 3. Refactored Python Code
+
+from typing import Dict, List, Any, Optional, Tuple
+
+TAX_RATE = 0.08
+PREMIUM_DISCOUNT = 0.10  # 10% off
+FREE_SHIPPING_THRESHOLD = 50.00
+DOMESTIC_SHIPPING_FEE = 5.99
+INTERNATIONAL_SHIPPING_FEE = 15.99
+
+
+def validate_order(order: Dict[str, Any], inventory: Dict[str, Any], customer_data: Dict[str, Any]) -> Optional[str]:
+    """Validates item existence, stock levels, and customer records."""
+    item_id = order['item_id']
+    quantity = order['quantity']
+    customer_id = order['customer_id']
+
+    if item_id not in inventory:
+        return 'Item not in inventory'
+    if inventory[item_id]['quantity'] < quantity:
+        return 'Insufficient quantity'
+    if customer_id not in customer_data:
+        return 'Customer not found'
+    return None
+
+
+def calculate_discounted_price(base_price: float, quantity: int, is_premium: bool) -> float:
+    """Calculates price with optional premium customer discount."""
+    subtotal = base_price * quantity
+    if is_premium:
+        subtotal *= (1 - PREMIUM_DISCOUNT)
+    return round(subtotal, 2)
+
+
+def calculate_shipping(price: float, location: str) -> float:
+    """Calculates shipping costs based on location and price threshold."""
+    if location == 'domestic':
+        return 0.0 if price >= FREE_SHIPPING_THRESHOLD else DOMESTIC_SHIPPING_FEE
+    return INTERNATIONAL_SHIPPING_FEE
+
+
+def calculate_order_financials(order: Dict[str, Any], inventory: Dict[str, Any], customer: Dict[str, Any]) -> Dict[str, float]:
+    """Computes price, shipping, tax, and final amount for an order."""
+    item_price = inventory[order['item_id']]['price']
+    discounted_price = calculate_discounted_price(
+        base_price=item_price,
+        quantity=order['quantity'],
+        is_premium=customer.get('premium', False)
+    )
+    shipping = calculate_shipping(discounted_price, customer.get('location', 'domestic'))
+    tax = round(discounted_price * TAX_RATE, 2)
+    final_price = round(discounted_price + shipping + tax, 2)
+
+    return {
+        'price': discounted_price,
+        'shipping': shipping,
+        'tax': tax,
+        'final_price': final_price
+    }
+
+
+def process_orders(orders: List[Dict[str, Any]], inventory: Dict[str, Any], customer_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Orchestrates order batch processing, updates inventory, and tallies revenue."""
+    processed_orders = []
+    error_orders = []
+    total_revenue = 0.0
+
+    for order in orders:
+        error = validate_order(order, inventory, customer_data)
+        if error:
+            error_orders.append({'order_id': order['order_id'], 'error': error})
+            continue
+
+        # Extract context & update inventory stock
+        item_id = order['item_id']
+        quantity = order['quantity']
+        customer = customer_data[order['customer_id']]
+        
+        inventory[item_id]['quantity'] -= quantity
+
+        # Calculate pricing details
+        financials = calculate_order_financials(order, inventory, customer)
+        total_revenue += financials['final_price']
+
+        processed_orders.append({
+            'order_id': order['order_id'],
+            'item_id': item_id,
+            'quantity': quantity,
+            'customer_id': order['customer_id'],
+            **financials
+        })
+
+    return {
+        'processed_orders': processed_orders,
+        'error_orders': error_orders,
+        'total_revenue': round(total_revenue, 2)
+    }
+
+## 4. AI vs. Personal Comparison & Reflection
+
+* **Initial Personal Intuition:** I recognized that `process_orders` was doing too much inline inside a single giant `for` loop, specifically mixing validation logic directly with business logic (like shipping and tax formulas).
+* **Key AI Insights I Gained:**
+  * **Magic Number Extraction:** The AI highlighted that magic numbers like `0.9` and `0.08` scattered inside nested `if` statements made policy updates brittle. Moving them to top-level constants makes business rule updates much cleaner.
+  * **Dict Unpacking (`**financials`):** The AI demonstrated using dict unpacking to append financial values cleanly onto result objects without manually copying each key-value pair.
+  * **Isolating Pure Functions:** Separating functions into pure calculations (e.g., `calculate_shipping`, `calculate_discounted_price`) makes unit testing individual pricing policies straightforward without needing to construct full `inventory` or `customer` database mocks.
+
+---
+
+# Exercise 3: Code Duplication Detection (JavaScript)
+
+## 1. Prompt Used
+
+```text
+I suspect there might be repeated patterns in this code that could be consolidated. Please help me by:
+1. Identifying similar code segments that appear multiple times
+2. Suggesting ways to eliminate the duplication (e.g., helper functions, loops)
+3. Showing me what the refactored code could look like
+4. Explaining the benefits of the suggested changes
+
+function calculateUserStatistics(userData) {
+  // Calculate average age
+  let totalAge = 0;
+  for (let i = 0; i < userData.length; i++) {
+    totalAge += userData[i].age;
+  }
+  const averageAge = totalAge / userData.length;
+
+  // Calculate average income
+  let totalIncome = 0;
+  for (let i = 0; i < userData.length; i++) {
+    totalIncome += userData[i].income;
+  }
+  const averageIncome = totalIncome / userData.length;
+
+  // Calculate average score
+  let totalScore = 0;
+  for (let i = 0; i < userData.length; i++) {
+    totalScore += userData[i].score;
+  }
+  const averageScore = totalScore / userData.length;
+
+  // Find highest age
+  let highestAge = userData[0].age;
+  for (let i = 1; i < userData.length; i++) {
+    if (userData[i].age > highestAge) {
+      highestAge = userData[i].age;
+    }
+  }
+
+  // Find highest income
+  let highestIncome = userData[0].income;
+  for (let i = 1; i < userData.length; i++) {
+    if (userData[i].income > highestIncome) {
+      highestIncome = userData[i].income;
+    }
+  }
+
+  // Find highest score
+  let highestScore = userData[0].score;
+  for (let i = 1; i < userData.length; i++) {
+    if (userData[i].score > highestScore) {
+      highestScore = userData[i].score;
+    }
+  }
+
+  return {
+    age: {
+      average: averageAge,
+      highest: highestAge
+    },
+    income: {
+      average: averageIncome,
+      highest: highestIncome
+    },
+    score: {
+      average: averageScore,
+      highest: highestScore
+    }
+  };
+}
+
+## 2. Repeated Patterns & Consolidation Strategy
+
+### Identified Duplication
+1. **Average Calculation Loops:** The code runs three separate `for` loops that sum up property values (`age`, `income`, `score`) and divide by `userData.length`.
+2. **Maximum Value Search Loops:** The code runs three separate `for` loops comparing properties to find peak values across `age`, `income`, and `score`.
+3. **Data Access Pattern:** Identical array traversal logic is repeated six separate times across the exact same dataset.
+
+### Recommended Approaches to Consolidate
+* **Approach A (Generic Helper Functions):** Extract generic helper functions (`calculateAverage(data, key)` and `findHighest(data, key)` or native JavaScript `reduce`/`Math.max`).
+* **Approach B (Single-Pass Accumulator):** Iterate over `userData` once to tally sums and track maximum values across all fields simultaneously.
+
+## 3. Refactored JavaScript Code
+* **Option 1:** Generic Helper Functions with reduce & Math.max
+
+function calculateAverage(data, key) {
+  if (!data || data.length === 0) return 0;
+  const sum = data.reduce((total, item) => total + item[key], 0);
+  return sum / data.length;
+}
+
+function findHighest(data, key) {
+  if (!data || data.length === 0) return 0;
+  return Math.max(...data.map((item) => item[key]));
+}
+
+function getFieldMetrics(data, key) {
+  return {
+    average: calculateAverage(data, key),
+    highest: findHighest(data, key),
+  };
+}
+
+function calculateUserStatistics(userData) {
+  if (!userData || userData.length === 0) {
+    return {
+      age: { average: 0, highest: 0 },
+      income: { average: 0, highest: 0 },
+      score: { average: 0, highest: 0 },
+    };
+  }
+
+  return {
+    age: getFieldMetrics(userData, 'age'),
+    income: getFieldMetrics(userData, 'income'),
+    score: getFieldMetrics(userData, 'score'),
+  };
+}
+
+## 4. Evaluation for Junior Developers & Reflection
+
+* **Benefits of Consolidation:**
+  * **DRY Principle:** Shrinks the codebase from ~65 lines to under 30 lines.
+  * **Scalability:** Adding a new metric (e.g., `experience`) requires adding only one line (`experience: getFieldMetrics(userData, 'experience')`) instead of copying two full `for` loops.
+  * **Edge Case Handling:** Input guards check for empty/null arrays in one central place instead of crashing on `userData[0]`.
+
+* **Team Impact & Junior Dev Evaluation:**
+  * **Option 1 (Generic Helpers) is ideal for junior developers:** Passing property keys as strings to dedicated functions (`getFieldMetrics(userData, 'age')`) keeps each operation clear and easy to debug.
+  * **Avoiding Over-Engineering:** A single-pass `reduce` loop that calculates everything in one go is faster ($O(n)$ vs $O(n)$ with fewer iterations), but can quickly become hard for junior devs to read. Simple helper functions strike the best balance between clean abstractions and readability.
+
+# Reflection & Next Steps
+
+## Reflection Questions
+
+### 1. Which prompting strategy did you find most useful? Why?
+The **Function Refactoring** prompt strategy (Exercise 2) was the most immediately impactful. While naming and duplication issues are relatively easy to spot manually, identifying tangled responsibilities in a single long function and deciding how to cleanly decompose it takes more mental effort. Having the AI systematically map out guard clauses, pure calculations, and side effects made restructuring complex logic straightforward.
+
+### 2. What kinds of improvements did the AI suggest that you might not have thought of?
+* **Type and Guard Improvements (e.g., `Optional<T>` in Java):** Beyond simple renaming, the AI highlighted API safety risks, such as returning raw `null` vs. returning an `Optional<User>` to prevent potential `NullPointerException` bugs downstream.
+* **Security & Readability Intersections:** Pointing out that direct SQL string concatenation wasn't just a readability issue, but a critical SQL Injection vulnerability.
+* **Property Access Abstraction in JavaScript:** Using generic property keys with `reduce` (`getFieldMetrics(userData, 'age')`) to handle metric aggregation cleanly instead of writing repetitive loop constructs.
+
+### 3. Were there any suggestions the AI made that you disagreed with? Why?
+Yes. In Exercise 3, an alternative suggestion was to compress all statistical calculations into a single `Array.prototype.reduce()` pass to iterate through the list only once. While computationally $O(n)$, combining all sum calculations and maximum tracking into one giant accumulator object hurt readability for junior developers. Keeping clean, single-purpose helper functions is preferable for maintainability over micro-optimizing memory passes on small datasets.
+
+### 4. How might you adapt these prompts for your specific codebase or tech stack?
+* **Specify Strict Tech Stack Context:** Include exact runtime versions (e.g., Java 17+, Python 3.11, ES2022) and frameworks (e.g., Spring Boot, FastAPI, Node.js) in the prompt template context.
+* **Incorporate Team Linter & Style Rules:** Include project-specific coding standards explicitly in the prompt (e.g., "Must pass ESLint / Google Java Style Guide / PEP 8 guidelines").
+* **Target Functional Paradigms:** Request pure functions and explicit typing (TypeScript / Python type hints) by default to maintain static analysis compatibility.
+
+### 5. What safeguards would you put in place before applying AI-suggested refactoring to production code?
+* **Comprehensive Test Suite (Pre and Post Refactoring):** Ensure full unit and integration test coverage exists *before* refactoring. Run the exact same test suite after applying AI changes to verify zero regressions in system behavior.
+* **Static Analysis & Security Scanning:** Run tools like SonarQube, SpotBugs, or Bandit to catch introduced vulnerabilities, type mismatches, or anti-patterns.
+* **Strict Human Code Review (PR Process):** Treat all AI-generated code as a proposal from a peer. Every line must be critically reviewed and validated by a human engineer before merging into `main`.
+
+---
+
