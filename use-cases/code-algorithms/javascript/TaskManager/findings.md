@@ -1999,5 +1999,489 @@ Yes. In Exercise 3, an alternative suggestion was to compress all statistical ca
 * **Static Analysis & Security Scanning:** Run tools like SonarQube, SpotBugs, or Bandit to catch introduced vulnerabilities, type mismatches, or anti-patterns.
 * **Strict Human Code Review (PR Process):** Treat all AI-generated code as a proposal from a peer. Every line must be critically reviewed and validated by a human engineer before merging into `main`.
 
+===
+
+# Exercise: Function Decomposition Challenge
+
+## 1. Prompts Executed
+
+* **Prompt 1 (Function Responsibility Analysis):** Decomposed `validateUserData` into a top-level orchestrator delegating to specialized helper functions for each data domain.
+* **Prompt 2 (Single-Responsibility Extraction):** Extracted `validateAddress` to encapsulate address properties and postal code regex patterns separately.
+* **Prompt 3 (Conditional Logic Simplification):** Simplified deeply nested `if/else` blocks across date parsing and country postal checks into flat guard statements.
+
+## 2. Analysis & Decomposition Breakdown
+
+### Distinct Responsibilities Identified
+* **Mode & Required Field Checks:** Distinguishing between registration and profile update workflows.
+* **Credential Validation:** Username length/regex, password complexity rules, and password match checks.
+* **Identity & Contact Validation:** Email format, uniqueness checks against existing records, and phone regex checks.
+* **Temporal Domain Rules:** Date of birth parsing, relative age boundary calculations ($13 \le \text{age} \le 120$).
+* **Nested Object & Geographic Rules:** Address object structure validation and postal code matching by country code (`US`, `CA`, `UK`).
+* **Extension Points:** Iterating through custom user-provided validator functions.
+
 ---
+
+## 3. Comprehensive Refactored JavaScript Code
+
+```javascript
+/**
+ * Configuration & Regular Expressions
+ */
+const POSTAL_CODE_PATTERNS = {
+  US: /^\d{5}(-\d{4})?$/,
+  CA: /^[A-Za-z]\d[A-Za-z] \d[A-Za-z]\d$/,
+  UK: /^[A-Z]{1,2}\d[A-Z\d]? \d[A-Z]{2}$/
+};
+
+const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_REGEX = /^\+?[\d\s\-()]{10,15}$/;
+
+/**
+ * Main Orchestrator: Validates user data by delegating to specialized domain validators.
+ */
+function validateUserData(userData, options = {}) {
+  const errors = [];
+  const isRegistration = Boolean(options.isRegistration);
+
+  errors.push(...validateRequiredFields(userData, isRegistration));
+  errors.push(...validateUsername(userData.username, isRegistration, options.checkExisting));
+  errors.push(...validatePassword(userData.password, userData.confirmPassword, isRegistration));
+  errors.push(...validateEmail(userData.email, isRegistration, options.checkExisting));
+  errors.push(...validateDateOfBirth(userData.dateOfBirth));
+  errors.push(...validateAddress(userData.address));
+  errors.push(...validatePhone(userData.phone));
+  errors.push(...executeCustomValidations(userData, options.customValidations));
+
+  return errors;
+}
+
+/**
+ * 1. Required Fields Validation
+ */
+function validateRequiredFields(userData, isRegistration) {
+  const errors = [];
+  if (isRegistration) {
+    const required = ['username', 'email', 'password', 'confirmPassword'];
+    for (const field of required) {
+      if (!userData[field] || userData[field].trim() === '') {
+        errors.push(`${field} is required for registration`);
+      }
+    }
+  } else {
+    const required = ['firstName', 'lastName', 'dateOfBirth', 'address'];
+    for (const field of required) {
+      if (userData[field] !== undefined && userData[field].trim() === '') {
+        errors.push(`${field} cannot be empty if provided`);
+      }
+    }
+  }
+  return errors;
+}
+
+/**
+ * 2. Username Domain Logic
+ */
+function validateUsername(username, isRegistration, checkExisting) {
+  const errors = [];
+  if (!username) return errors;
+
+  if (username.length < 3) errors.push('Username must be at least 3 characters long');
+  if (username.length > 20) errors.push('Username must be at most 20 characters long');
+  if (!USERNAME_REGEX.test(username)) errors.push('Username can only contain letters, numbers, and underscores');
+
+  if (isRegistration && checkExisting && checkExisting.usernameExists(username)) {
+    errors.push('Username is already taken');
+  }
+
+  return errors;
+}
+
+/**
+ * 3. Password Rules & Matching
+ */
+function validatePassword(password, confirmPassword, isRegistration) {
+  const errors = [];
+  if (!password) return errors;
+
+  if (password.length < 8) errors.push('Password must be at least 8 characters long');
+  if (!/[A-Z]/.test(password)) errors.push('Password must contain at least one uppercase letter');
+  if (!/[a-z]/.test(password)) errors.push('Password must contain at least one lowercase letter');
+  if (!/[0-9]/.test(password)) errors.push('Password must contain at least one number');
+  if (!/[^A-Za-z0-9]/.test(password)) errors.push('Password must contain at least one special character');
+
+  if (confirmPassword !== password) {
+    errors.push('Password and confirmation do not match');
+  }
+
+  return errors;
+}
+
+/**
+ * 4. Email Formatting & Uniqueness
+ */
+function validateEmail(email, isRegistration, checkExisting) {
+  const errors = [];
+  if (email === undefined) return errors;
+
+  if (email.trim() === '') {
+    if (isRegistration) errors.push('Email is required');
+    return errors;
+  }
+
+  if (!EMAIL_REGEX.test(email)) {
+    errors.push('Email format is invalid');
+  } else if (checkExisting && checkExisting.emailExists(email)) {
+    errors.push('Email is already registered');
+  }
+
+  return errors;
+}
+
+/**
+ * 5. Single Responsibility: Date of Birth & Age Restrictions
+ */
+function validateDateOfBirth(dateOfBirth) {
+  const errors = [];
+  if (!dateOfBirth) return errors;
+
+  const dobDate = new Date(dateOfBirth);
+  if (isNaN(dobDate.getTime())) {
+    return ['Date of birth is not a valid date'];
+  }
+
+  const now = new Date();
+  const minAgeDate = new Date(now.getFullYear() - 13, now.getMonth(), now.getDate());
+  const maxAgeDate = new Date(now.getFullYear() - 120, now.getMonth(), now.getDate());
+
+  if (dobDate > now) errors.push('Date of birth cannot be in the future');
+  else if (dobDate > minAgeDate) errors.push('You must be at least 13 years old');
+  else if (dobDate < maxAgeDate) errors.push('Invalid date of birth (age > 120 years)');
+
+  return errors;
+}
+
+/**
+ * 6. Single Responsibility: Address & Postal Code Extracted Helper
+ */
+function validateAddress(address) {
+  const errors = [];
+  if (address === undefined || address === '') return errors;
+
+  if (typeof address !== 'object' || address === null) {
+    return ['Address must be an object with required fields'];
+  }
+
+  const requiredFields = ['street', 'city', 'zip', 'country'];
+  for (const field of requiredFields) {
+    if (!address[field] || address[field].trim() === '') {
+      errors.push(`Address ${field} is required`);
+    }
+  }
+
+  if (address.zip && address.country) {
+    const pattern = POSTAL_CODE_PATTERNS[address.country];
+    if (pattern && !pattern.test(address.zip)) {
+      errors.push(`Invalid ${address.country} postal code format`);
+    }
+  }
+
+  return errors;
+}
+
+/**
+ * 7. Phone Format Validation
+ */
+function validatePhone(phone) {
+  if (phone !== undefined && phone !== '' && !PHONE_REGEX.test(phone)) {
+    return ['Phone number format is invalid'];
+  }
+  return [];
+}
+
+/**
+ * 8. Custom Extension Validators Execution
+ */
+function executeCustomValidations(userData, customValidations = []) {
+  const errors = [];
+  for (const validation of customValidations) {
+    const field = validation.field;
+    if (userData[field] !== undefined) {
+      const isValid = validation.validator(userData[field], userData);
+      if (!isValid) {
+        errors.push(validation.message || `Invalid value for ${field}`);
+      }
+    }
+  }
+  return errors;
+}
+
+===
+
+# Findings: Code Readability Challenge (JavaScript)
+
+## 1. What the Function Actually Does
+The original function `p` acts as an **order processing or inventory fulfillment function**. 
+
+It takes a list of requested items, checks each item against an available inventory list, and attempts to fulfill a fixed requested quantity for each item:
+* It searches the inventory for a matching item `id`.
+* If found and the stock quantity is sufficient (`q >= targetQuantity`), it adds the item to a list of successfully fulfilled items, calculates the subtotal cost (`price * quantity`), and deducts that quantity from the remaining inventory.
+* If an item is not found in the inventory, it logs an availability warning message.
+* Finally, it returns an object containing the array of fulfilled items and the total dollar amount.
+
+---
+
+## 2. Refactored Code & Unit Verification
+
+Below is the refactored code with clear, self-documenting function and variable names, improved structure, and clean JSDoc documentation. 
+
+### Refactored JavaScript Code
+
+```javascript
+/**
+ * Processes a list of requested items against current inventory, deducting stock 
+ * and calculating the total cost for fulfilled items.
+ *
+ * @param {Array<{id: string, p: number}>} requestedItems - List of items requested with their prices.
+ * @param {Array<{id: string, q: number}>} inventory - Current inventory list with available quantities.
+ * @param {number} targetQuantity - The quantity required for each requested item.
+ * @returns {{ successfulItems: Array, totalCost: number }} Result object containing fulfilled items and grand total cost.
+ */
+function processInventoryOrder(requestedItems, inventory, targetQuantity) {
+  const successfulItems = [];
+  let totalCost = 0;
+
+  for (const requestedItem of requestedItems) {
+    let itemFoundInInventory = false;
+
+    for (const inventoryItem of inventory) {
+      if (requestedItem.id === inventoryItem.id) {
+        itemFoundInInventory = true;
+
+        const hasSufficientStock = inventoryItem.q >= targetQuantity;
+        if (hasSufficientStock) {
+          successfulItems.push(requestedItem);
+          totalCost += requestedItem.p * targetQuantity;
+          inventoryItem.q -= targetQuantity;
+        }
+        break;
+      }
+    }
+
+    if (!itemFoundInInventory) {
+      console.log("Item " + requestedItem.id + " not available");
+    }
+  }
+
+  return {
+    s: successfulItems,
+    t: totalCost
+  };
+}
+
+#### **Note on Property Names in Return Object:**
+
+* The return properties (s and t) are kept intact so that the existing unit tests pass without modifying the test suite interface.
+
+## 3. Verified Unit Test Suite
+
+To run these tests on your machine using **Node.js**:
+1. Save the refactored code and the test suite below into a single file named `inventory.js`.
+2. Open your terminal and run: `node inventory.js`
+
+```javascript
+/**
+ * Processes a list of requested items against current inventory, deducting stock 
+ * and calculating the total cost for fulfilled items.
+ *
+ * @param {Array<{id: string, p: number}>} requestedItems - List of items requested with their prices.
+ * @param {Array<{id: string, q: number}>} inventory - Current inventory list with available quantities.
+ * @param {number} targetQuantity - The quantity required for each requested item.
+ * @returns {{ successfulItems: Array, totalCost: number }} Result object containing fulfilled items and grand total cost.
+ */
+function processInventoryOrder(requestedItems, inventory, targetQuantity) {
+  const successfulItems = [];
+  let totalCost = 0;
+
+  for (const requestedItem of requestedItems) {
+    let itemFoundInInventory = false;
+
+    for (const inventoryItem of inventory) {
+      if (requestedItem.id === inventoryItem.id) {
+        itemFoundInInventory = true;
+
+        const hasSufficientStock = inventoryItem.q >= targetQuantity;
+        if (hasSufficientStock) {
+          successfulItems.push(requestedItem);
+          totalCost += requestedItem.p * targetQuantity;
+          inventoryItem.q -= targetQuantity;
+        }
+        break;
+      }
+    }
+
+    if (!itemFoundInInventory) {
+      console.log("Item " + requestedItem.id + " not available");
+    }
+  }
+
+  return {
+    s: successfulItems,
+    t: totalCost
+  };
+}
+
+// Unit tests for the inventory processing function
+function runTests() {
+  console.log("Running tests for inventory processing function...\n");
+
+  // Test Case 1: Basic functionality
+  let testCase1 = () => {
+    const requestedItems = [
+      { id: "item1", p: 10 },
+      { id: "item2", p: 20 },
+      { id: "item3", p: 30 }
+    ];
+
+    const inventory = [
+      { id: "item1", q: 5 },
+      { id: "item2", q: 3 },
+      { id: "item3", q: 1 }
+    ];
+
+    const quantityRequested = 2;
+
+    const result = processInventoryOrder(requestedItems, inventory, quantityRequested);
+
+    let success = true;
+
+    if (result.s.length !== 2) {
+      console.error(`FAILED: Expected 2 successful items, got ${result.s.length}`);
+      success = false;
+    }
+
+    if (result.t !== 60) {
+      console.error(`FAILED: Expected total 60, got ${result.t}`);
+      success = false;
+    }
+
+    if (inventory[0].q !== 3 || inventory[1].q !== 1 || inventory[2].q !== 1) {
+      console.error(`FAILED: Inventory not updated correctly`);
+      success = false;
+    }
+
+    return success;
+  };
+
+  // Test Case 2: No items available in sufficient quantity
+  let testCase2 = () => {
+    const requestedItems = [
+      { id: "item1", p: 10 }
+    ];
+
+    const inventory = [
+      { id: "item1", q: 1 }
+    ];
+
+    const quantityRequested = 2;
+
+    const result = processInventoryOrder(requestedItems, inventory, quantityRequested);
+
+    let success = true;
+
+    if (result.s.length !== 0) {
+      console.error(`FAILED: Expected 0 successful items, got ${result.s.length}`);
+      success = false;
+    }
+
+    if (result.t !== 0) {
+      console.error(`FAILED: Expected total 0, got ${result.t}`);
+      success = false;
+    }
+
+    return success;
+  };
+
+  // Test Case 3: Item not found
+  let testCase3 = () => {
+    const requestedItems = [
+      { id: "item1", p: 10 },
+      { id: "itemNonExistent", p: 20 }
+    ];
+
+    const inventory = [
+      { id: "item1", q: 5 }
+    ];
+
+    const quantityRequested = 1;
+
+    const result = processInventoryOrder(requestedItems, inventory, quantityRequested);
+
+    let success = true;
+
+    if (result.s.length !== 1) {
+      console.error(`FAILED: Expected 1 successful item, got ${result.s.length}`);
+      success = false;
+    }
+
+    if (result.t !== 10) {
+      console.error(`FAILED: Expected total 10, got ${result.t}`);
+      success = false;
+    }
+
+    return success;
+  };
+
+  const test1Result = testCase1();
+  const test2Result = testCase2();
+  const test3Result = testCase3();
+
+  if (test1Result && test2Result && test3Result) {
+    console.log("\nAll tests PASSED ✅");
+  } else {
+    console.log("\nSome tests FAILED ❌");
+  }
+}
+
+// Execute tests
+runTests();
+
+`
+### 4. Reflection Answers & 5. Team Explanation Pitch
+
+`
+## 4. Reflection Answers
+
+* **How much easier is the code to understand now?**  
+  Significantly easier. In the original code, mentally mapping `i`, `a`, `q`, `r`, `t`, `c`, `f` required constant cognitive context-switching. With descriptive names, the business logic reads like plain English.
+
+* **What readability issues did you miss that the AI caught?**  
+  Extracting the inline condition `a[k].q >= q` into a boolean variable like `hasSufficientStock` made the conditional branch immediately understandable without having to decipher array index properties on the fly.
+
+* **What readability issues did the AI miss that you noticed?**  
+  The returned keys `s` and `t` are still cryptic in the returned object. While they must remain as `s` and `t` to satisfy the existing unit test contract, using internal aliases (`successfulItems` and `totalCost`) inside the function prevents the internal logic from being polluted by bad external contract names.
+
+* **Which readability improvements had the biggest impact?**  
+  Renaming `p` to `processInventoryOrder`, replacing `i` and `a` with `requestedItems` and `inventory`, and replacing `for (let j...)` loops with modern `for...of` loops had the largest impact on instantly understanding the control flow.
+
+* **How did the improved names change your understanding of the code’s purpose?**  
+  Originally, `c.p * q` looked like generic math. Once `c.p` became `requestedItem.p` (price) and `q` became `targetQuantity`, it immediately clicked that `t += c.p * q` was calculating a financial grand total for an order.
+
+* **What readability patterns can you apply to your future code?**  
+  * **Intention-revealing Naming:** Use domain terms (e.g., `inventory`, `requestedItems`, `hasSufficientStock`).
+  * **Modern Loop Structures:** Prefer `for...of` loops over traditional index-counted `for` loops when indices aren't strictly required.
+  * **Boolean Extraction:** Lift complex conditions into named variables before entering `if` blocks.
+
+---
+
+## 5. Team Explanation Pitch (Script)
+
+> "Hey team! I refactored our inventory processing function. Originally, it used single-letter variable names like `p`, `a`, and `c`, which forced anyone reading it to reverse-engineer what the code was trying to do. 
+> 
+> I renamed the function to `processInventoryOrder` and updated the variables to clearly show what they represent—like `requestedItems`, `inventory`, and `totalCost`. I also swapped the standard `for` loop counters for cleaner `for...of` loops and extracted stock checks into a boolean flag `hasSufficientStock`. 
+>
+> Crucially, I maintained the exact return structure (`s` and `t`) so all our unit tests continue to pass 100% without breaking any downstream dependents."
+
+<FollowUp label="Would you like me to refactor this using modern JavaScript (e.g., Array.prototype.find or reduce) to eliminate the nested loops completely?" query="Show me how to refactor the processInventoryOrder function using modern JavaScript methods like find or reduce while keeping all unit tests passing."/>
+
 
