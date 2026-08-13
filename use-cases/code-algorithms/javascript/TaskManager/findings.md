@@ -2485,3 +2485,203 @@ runTests();
 <FollowUp label="Would you like me to refactor this using modern JavaScript (e.g., Array.prototype.find or reduce) to eliminate the nested loops completely?" query="Show me how to refactor the processInventoryOrder function using modern JavaScript methods like find or reduce while keeping all unit tests passing."/>
 
 
+====
+
+# Findings: Design Pattern Implementation Challenge (Strategy Pattern)
+
+## 1. Pattern Analysis & Strategy Justification
+
+### Analysis of Original Code
+The original `calculateShippingCost` function suffers from classic "conditional sprawl":
+* **Deep Nesting:** A top-level `if-else` tree checks `shippingMethod`, while nested `if-else` blocks check `destinationCountry` and package dimensions.
+* **Violation of Open/Closed Principle (OCP):** Adding a new shipping method (e.g., `same-day` or `freight`) requires modifying the existing core function and touching existing logic.
+* **Violation of Single Responsibility Principle (SRP):** One function is responsible for determining rates across all shipping tiers, calculating volume surcharges, and validating region availability.
+
+### Why the Strategy Pattern?
+The Strategy pattern encapsulates each shipping algorithm (`Standard`, `Express`, `Overnight`) into its own strategy class/object implementing a common interface. 
+
+**Benefits:**
+1. **Extensibility:** New shipping methods can be added as new strategy classes without modifying existing shipping logic.
+2. **Testability:** Each shipping strategy can be unit tested in complete isolation.
+3. **Clarity:** Eliminates nested conditional branches in favor of direct strategy execution.
+
+---
+
+## 2. Refactored Code with Strategy Pattern
+
+Below is the refactored code implementing the **Strategy Pattern** in idiomatic JavaScript using modern ES6 classes.
+
+```javascript
+/**
+ * Interface / Base Strategy for Shipping Methods
+ */
+class ShippingStrategy {
+  calculate(packageDetails, destinationCountry) {
+    throw new Error("Method 'calculate()' must be implemented.");
+  }
+}
+
+/**
+ * Strategy: Standard Shipping
+ */
+class StandardShippingStrategy extends ShippingStrategy {
+  calculate(packageDetails, destinationCountry) {
+    const { weight, length, width, height } = packageDetails;
+    const rates = { USA: 2.5, Canada: 3.5, Mexico: 4.0 };
+    const rate = rates[destinationCountry] || 4.5; // Default international rate
+
+    let cost = weight * rate;
+
+    // Dimensional weight adjustment
+    const volume = length * width * height;
+    if (weight < 2 && volume > 1000) {
+      cost += 5.0;
+    }
+
+    return cost.toFixed(2);
+  }
+}
+
+/**
+ * Strategy: Express Shipping
+ */
+class ExpressShippingStrategy extends ShippingStrategy {
+  calculate(packageDetails, destinationCountry) {
+    const { weight, length, width, height } = packageDetails;
+    const rates = { USA: 4.5, Canada: 5.5, Mexico: 6.0 };
+    const rate = rates[destinationCountry] || 7.5; // Default international rate
+
+    let cost = weight * rate;
+
+    // Large package surcharge
+    const volume = length * width * height;
+    if (volume > 5000) {
+      cost += 15.0;
+    }
+
+    return cost.toFixed(2);
+  }
+}
+
+/**
+ * Strategy: Overnight Shipping
+ */
+class OvernightShippingStrategy extends ShippingStrategy {
+  calculate(packageDetails, destinationCountry) {
+    const { weight } = packageDetails;
+    const rates = { USA: 9.5, Canada: 12.5 };
+
+    if (!rates[destinationCountry]) {
+      return "Overnight shipping not available for this destination";
+    }
+
+    const cost = weight * rates[destinationCountry];
+    return cost.toFixed(2);
+  }
+}
+
+/**
+ * Context & Calculator
+ */
+class ShippingCalculator {
+  constructor() {
+    this.strategies = {
+      standard: new StandardShippingStrategy(),
+      express: new ExpressShippingStrategy(),
+      overnight: new OvernightShippingStrategy()
+    };
+  }
+
+  /**
+   * Register a new strategy at runtime (Open/Closed Principle)
+   */
+  registerStrategy(methodName, strategyInstance) {
+    this.strategies[methodName] = strategyInstance;
+  }
+
+  calculate(packageDetails, destinationCountry, shippingMethod) {
+    const strategy = this.strategies[shippingMethod];
+    if (!strategy) {
+      throw new Error(`Unsupported shipping method: ${shippingMethod}`);
+    }
+
+    return strategy.calculate(packageDetails, destinationCountry);
+  }
+}
+
+// Backward-compatible entry point wrapper
+function calculateShippingCost(packageDetails, destinationCountry, shippingMethod) {
+  const calculator = new ShippingCalculator();
+  return calculator.calculate(packageDetails, destinationCountry, shippingMethod);
+}
+
+``
+## 3. Unit Test Suite
+Below is the unit test suite verifying that all edge cases, rates, surcharges, and destination restrictions produce identical output to the original implementation.
+
+// Unit test suite for Shipping Calculator
+function runShippingTests() {
+  console.log("Running Strategy Pattern verification tests...\n");
+
+  let allPassed = true;
+
+  const assertEqual = (description, actual, expected) => {
+    if (actual === expected) {
+      console.log(`✅ PASSED: ${description}`);
+    } else {
+      console.error(`❌ FAILED: ${description} | Expected: "${expected}", Got: "${actual}"`);
+      allPassed = false;
+    }
+  };
+
+  const standardPackage = { weight: 5, length: 10, width: 10, height: 10 };
+  const lightLargePackage = { weight: 1, length: 11, width: 10, height: 10 }; // Volume = 1100
+  const hugePackage = { weight: 10, length: 20, width: 20, height: 15 };     // Volume = 6000
+
+  // Standard Shipping Tests
+  assertEqual("Standard USA", calculateShippingCost(standardPackage, 'USA', 'standard'), "12.50");
+  assertEqual("Standard Canada", calculateShippingCost(standardPackage, 'Canada', 'standard'), "17.50");
+  assertEqual("Standard Mexico", calculateShippingCost(standardPackage, 'Mexico', 'standard'), "20.00");
+  assertEqual("Standard International (UK)", calculateShippingCost(standardPackage, 'UK', 'standard'), "22.50");
+  assertEqual("Standard Surcharge (Vol > 1000 & W < 2)", calculateShippingCost(lightLargePackage, 'USA', 'standard'), "7.50");
+
+  // Express Shipping Tests
+  assertEqual("Express USA", calculateShippingCost(standardPackage, 'USA', 'express'), "22.50");
+  assertEqual("Express Canada", calculateShippingCost(standardPackage, 'Canada', 'express'), "27.50");
+  assertEqual("Express Mexico", calculateShippingCost(standardPackage, 'Mexico', 'express'), "30.00");
+  assertEqual("Express International (Germany)", calculateShippingCost(standardPackage, 'Germany', 'express'), "37.50");
+  assertEqual("Express Surcharge (Vol > 5000)", calculateShippingCost(hugePackage, 'USA', 'express'), "60.00");
+
+  // Overnight Shipping Tests
+  assertEqual("Overnight USA", calculateShippingCost(standardPackage, 'USA', 'overnight'), "47.50");
+  assertEqual("Overnight Canada", calculateShippingCost(standardPackage, 'Canada', 'overnight'), "62.50");
+  assertEqual("Overnight Unsupported Country", calculateShippingCost(standardPackage, 'Mexico', 'overnight'), "Overnight shipping not available for this destination");
+
+  console.log(allPassed ? "\n🎉 All tests PASSED successfully!" : "\n❌ Some tests failed.");
+}
+
+// Execute tests
+runShippingTests();
+
+## 4. Reflection Answers
+
+* **How did implementing the pattern improve the code’s maintainability?**  
+  It eliminated the nested `if-else` logic tree and separated distinct business domains into dedicated classes. If the rules for Express shipping change, developers only need to open and modify `ExpressShippingStrategy`, reducing the risk of unintentionally breaking Standard or Overnight calculations.
+
+* **What future changes will be easier because of this pattern?**  
+  Adding new shipping methods (e.g., `SameDayShippingStrategy` or `EcoFreightStrategy`) can be achieved simply by creating a new class and registering it with the `ShippingCalculator`. No existing calculation code needs to be altered.
+
+* **Were there any unexpected challenges in implementing the pattern?**  
+  The main nuance was handling non-numeric return values (e.g., the string warning returned when Overnight shipping is attempted for an unsupported country like Mexico). Ensuring the interface contracted appropriately for both valid rates and region restrictions required careful handling within `OvernightShippingStrategy`.
+
+---
+
+## 5. Team Explanation Pitch (Script)
+
+> "Hey team! I refactored our shipping calculator to use the **Strategy Pattern**. Previously, `calculateShippingCost` relied on deeply nested `if-else` blocks that mixed rate calculations, volumetric surcharges, and country restrictions for every shipping method in a single function.
+> 
+> Now, each shipping method—Standard, Express, and Overnight—is encapsulated in its own strategy object. The main calculator simply delegates the request to the correct strategy. 
+> 
+> This keeps our code compliant with the **Open/Closed Principle**: when marketing asks us to add a new shipping tier, we just drop in a new strategy class instead of editing a 60-line conditional tree. All unit tests pass with zero behavior changes!"
+
+===
